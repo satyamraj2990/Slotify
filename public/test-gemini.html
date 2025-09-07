@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Gemini API</title>
+</head>
+<body>
+    <h1>Test Gemini API</h1>
+    <button onclick="testGemini()">Test Gemini</button>
+    <div id="result"></div>
+
+    <script>
+        async function testGemini() {
+            document.getElementById('result').innerHTML = 'Testing...';
+            
+            try {
+                const response = await fetch('/api/gemini/generate', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        prompt: 'Generate a simple hello message'
+                    })
+                });
+                
+                const data = await response.json();
+                document.getElementById('result').innerHTML = 
+                    '<h3>Success!</h3><p>' + data.text + '</p>';
+            } catch (error) {
+                document.getElementById('result').innerHTML = 
+                    '<h3>Error:</h3><p>' + error.message + '</p>';
+            }
+        }
+    </script>
+</body>
+</html>

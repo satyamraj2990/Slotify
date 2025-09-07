@@ -1,0 +1,105 @@
+/** @import must precede all other statements */
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap");
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  /**
+   * Tailwind CSS theme
+   * tailwind.config.ts expects the following color variables to be expressed as HSL values.
+   * A different format will require also updating the theme in tailwind.config.ts.
+  */
+  :root {
+    /* Light theme: white + soft pink accents */
+    --background: 0 0% 100%;
+    --foreground: 234 15% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 234 15% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 234 15% 15%;
+
+    --primary: 330 85% 60%; /* soft pink */
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 234 15% 15%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 234 10% 45%;
+
+    --accent: 315 90% 72%;
+    --accent-foreground: 234 15% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 330 85% 60%;
+
+    --radius: 1rem;
+
+    --sidebar-background: 0 0% 100%;
+    --sidebar-foreground: 234 15% 15%;
+    --sidebar-primary: 330 85% 60%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 234 15% 15%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 330 85% 60%;
+  }
+
+  .dark {
+    /* Dark neon: black + neon pink */
+    --background: 0 0% 6%;
+    --foreground: 210 40% 98%;
+
+    --card: 0 0% 10%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 8%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 322 92% 56%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 0 0% 16%;
+    --muted-foreground: 210 10% 70%;
+
+    --accent: 295 100% 60%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 322 92% 56%;
+
+    --sidebar-background: 0 0% 8%;
+    --sidebar-foreground: 210 40% 98%;
+    --sidebar-primary: 322 92% 56%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 14%;
+    --sidebar-accent-foreground: 210 40% 98%;
+    --sidebar-border: 0 0% 18%;
+    --sidebar-ring: 322 92% 56%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased transition-colors duration-300;
+  }
+}
