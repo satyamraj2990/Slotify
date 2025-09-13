@@ -24,6 +24,10 @@ export interface Profile {
   last_name?: string
   display_name?: string
   department?: string
+  phone?: string
+  subjects?: string[]
+  weekly_workload?: number
+  availability?: string
   created_at: string
   updated_at: string
 }
@@ -38,6 +42,9 @@ export interface Course {
   year: number
   course_type: 'major' | 'minor' | 'value_add' | 'core'
   max_students: number
+  theory_practical?: string
+  weekly_lectures?: number
+  assigned_teacher_id?: string
   created_by?: string
   created_at: string
   updated_at: string

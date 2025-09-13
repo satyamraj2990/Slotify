@@ -21,6 +21,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Failsafe: Always reset loading after 3 seconds max
+    const failsafeTimeout = setTimeout(() => {
+      console.log('Failsafe: Setting loading to false after timeout');
+      setLoading(false);
+    }, 3000);
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
@@ -29,11 +35,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setLoading(false);
       }
+      clearTimeout(failsafeTimeout); // Clear timeout if we get a response
+    }).catch(error => {
+      console.error('Error getting session:', error);
+      setLoading(false); // Ensure loading is reset even on error
+      clearTimeout(failsafeTimeout);
     });
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (event, session) => {
+        console.log('Auth state changed:', event, session?.user?.email);
         setUser(session?.user ?? null);
         
         if (session?.user) {
@@ -45,7 +57,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     );
 
-    return () => subscription.unsubscribe();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(failsafeTimeout);
+    };
   }, []);
 
   const fetchProfile = async (userId: string) => {
@@ -58,11 +73,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       if (error) {
         console.error('Error fetching profile:', error);
+        // If profile doesn't exist (PGRST116), that's okay for new users
+        if (error.code === 'PGRST116') {
+          console.log('No profile found - user may need to complete registration');
+          setProfile(null);
+        }
       } else {
         setProfile(data);
       }
     } catch (error) {
       console.error('Error fetching profile:', error);
+      setProfile(null);
     } finally {
       setLoading(false);
     }
@@ -70,18 +91,41 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login: AuthContextProps["login"] = useCallback(async (email: string, password: string) => {
     try {
+      console.log('🔄 Starting login process for:', email);
       setLoading(true);
-      const { data, error } = await supabase.auth.signInWithPassword({
+      
+      // Add timeout to prevent hanging
+      const loginPromise = supabase.auth.signInWithPassword({
         email,
         password
       });
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Login timeout')), 10000)
+      );
+      
+      const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
+
+      console.log('🔍 Login response:', { data: data?.user?.email, error: error?.message });
 
       if (error) {
+        console.error('❌ Login failed:', error.message);
+        setLoading(false);
         return { ok: false, error: error.message };
       }
 
+      console.log('✅ Login successful, waiting for auth state change...');
+      // Don't rely on auth state change listener - set loading false after short delay
+      // This ensures the button doesn't get stuck even if profile fetch fails
+      setTimeout(() => {
+        console.log('⏰ Timeout: Setting loading to false');
+        setLoading(false);
+      }, 1000);
+      
       return { ok: true };
     } catch (error: any) {
+      console.error('💥 Login exception:', error);
+      setLoading(false);
       return { ok: false, error: error.message || "Login failed" };
     }
   }, []);
@@ -103,11 +147,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (error) {
+        setLoading(false);
         return { ok: false, error: error.message };
       }
 
+      setLoading(false);
       return { ok: true };
     } catch (error: any) {
+      setLoading(false);
       return { ok: false, error: error.message || "Sign up failed" };
     }
   }, []);

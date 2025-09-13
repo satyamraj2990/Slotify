@@ -278,6 +278,36 @@ export const profilesApi = {
     return data as Profile[];
   },
 
+  // Create new profile (typically for teacher registration)
+  async create(profile: Omit<Profile, 'id' | 'created_at' | 'updated_at'>) {
+    // Note: This creates a profile without auth user - for demo purposes
+    // In production, you'd want to integrate with proper user signup flow
+    
+    // Generate a temporary UUID for demo (in production this would come from auth)
+    const tempId = crypto.randomUUID();
+    
+    const { data, error } = await supabase
+      .from('profiles')
+      .insert({
+        id: tempId,
+        email: profile.email,
+        role: profile.role,
+        first_name: profile.first_name,
+        last_name: profile.last_name,
+        display_name: profile.display_name,
+        department: profile.department,
+        phone: profile.phone,
+        subjects: profile.subjects,
+        weekly_workload: profile.weekly_workload,
+        availability: profile.availability
+      })
+      .select()
+      .single();
+
+    if (error) throw error;
+    return data as Profile;
+  },
+
   // Update profile
   async update(id: string, updates: Partial<Profile>) {
     const { data, error } = await supabase

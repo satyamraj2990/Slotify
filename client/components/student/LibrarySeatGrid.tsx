@@ -1,6 +1,8 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { librarySeatsApi } from "@/lib/api";
+import { useAuth } from "@/context/auth";
 
 // seat states: free, occupied, reserved
 type SeatState = "free" | "occupied" | "reserved";
@@ -37,16 +39,57 @@ function Lane({ label, seats, onToggle }: { label: string; seats: SeatState[]; o
 }
 
 export default function LibrarySeatGrid({ lanes = 50, chairsPerLane = 6 }: { lanes?: number; chairsPerLane?: number }) {
-  const initSide = useMemo(() => (
-    Array.from({ length: lanes }, () => Array.from({ length: chairsPerLane }, () => (Math.random() > 0.7 ? "reserved" : Math.random() > 0.45 ? "occupied" : "free" as SeatState)))
-  ), [lanes, chairsPerLane]);
-
-  const [left, setLeft] = useState<SeatState[][]>(initSide);
-  const [right, setRight] = useState<SeatState[][]>(initSide.map(row => row.slice()));
+  const { profile } = useAuth();
+  const [seats, setSeats] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
   const [wing, setWing] = useState<"Left" | "Right">("Left");
 
-  const current = wing === "Left" ? left : right;
-  const setCurrent = wing === "Left" ? setLeft : setRight;
+  // Load real seat data from database
+  useEffect(() => {
+    const fetchSeats = async () => {
+      try {
+        const seatData = await librarySeatsApi.getAll();
+        setSeats(seatData);
+      } catch (error) {
+        console.error('Error fetching seat data:', error);
+        // Fallback to mock data if API fails
+        const mockSeats = Array.from({ length: lanes * chairsPerLane }, (_, i) => ({
+          id: i,
+          lane_number: Math.floor(i / chairsPerLane) + 1,
+          seat_number: (i % chairsPerLane) + 1,
+          is_occupied: Math.random() > 0.7,
+          occupied_by: null
+        }));
+        setSeats(mockSeats);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSeats();
+  }, [lanes, chairsPerLane]);
+
+  // Convert flat seat array to grid structure
+  const current = useMemo(() => {
+    const grid: SeatState[][] = Array.from({ length: lanes }, () => 
+      Array.from({ length: chairsPerLane }, () => "free" as SeatState)
+    );
+
+    seats.forEach(seat => {
+      const laneIdx = seat.lane_number - 1;
+      const seatIdx = seat.seat_number - 1;
+      
+      if (laneIdx >= 0 && laneIdx < lanes && seatIdx >= 0 && seatIdx < chairsPerLane) {
+        if (seat.is_occupied) {
+          grid[laneIdx][seatIdx] = seat.occupied_by === profile?.id ? "reserved" : "occupied";
+        } else {
+          grid[laneIdx][seatIdx] = "free";
+        }
+      }
+    });
+
+    return grid;
+  }, [seats, lanes, chairsPerLane, profile?.id]);
 
   const totals = useMemo(() => {
     const flat = current.flat();
@@ -68,9 +111,51 @@ export default function LibrarySeatGrid({ lanes = 50, chairsPerLane = 6 }: { lan
     return { lane: bestLane + 1, seat: seatIdx + 1 };
   }, [current]);
 
-  const toggleSeat = (laneIdx: number, seatIdx: number) => {
-    setCurrent((rows) => rows.map((row, i) => i !== laneIdx ? row : row.map((s, j) => j !== seatIdx ? s : (s === "free" ? "reserved" : s === "reserved" ? "free" : s))));
+  const toggleSeat = async (laneIdx: number, seatIdx: number) => {
+    const seatData = seats.find(s => 
+      s.lane_number === laneIdx + 1 && s.seat_number === seatIdx + 1
+    );
+    
+    if (!seatData || !profile) return;
+
+    try {
+      if (seatData.is_occupied && seatData.occupied_by === profile.id) {
+        // Release the seat
+        await librarySeatsApi.update(seatData.id, {
+          is_occupied: false,
+          occupied_by: null
+        });
+      } else if (!seatData.is_occupied) {
+        // Occupy the seat
+        await librarySeatsApi.update(seatData.id, {
+          is_occupied: true,
+          occupied_by: profile.id
+        });
+      }
+      
+      // Refresh seat data
+      const updatedSeats = await librarySeatsApi.getAll();
+      setSeats(updatedSeats);
+    } catch (error) {
+      console.error('Error updating seat:', error);
+    }
   };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>Library Seat Tracker</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="animate-pulse space-y-3">
+            <div className="h-8 bg-muted/20 rounded w-1/3" />
+            <div className="h-64 bg-muted/20 rounded" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card>

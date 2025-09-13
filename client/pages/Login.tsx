@@ -26,13 +26,37 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
 
   const handleSubmit = async () => {
+    console.log('🎯 handleSubmit called, mode:', mode, 'email:', email);
     setError(null);
     
     if (mode === "login") {
-      const res = await login(email, password);
-      if (!res.ok) return setError(res.error || "Login failed");
-      nav("/app", { replace: true });
-      setTimeout(() => (window.location.hash = role), 0);
+      console.log('📧 Attempting login with:', { email, passwordLength: password.length });
+      
+      // Set a backup navigation timer in case login hangs
+      const backupNavigation = setTimeout(() => {
+        console.log('🚨 Backup navigation triggered after 3 seconds');
+        window.location.href = `/app#${role}`;
+      }, 3000);
+      
+      try {
+        const res = await login(email, password);
+        clearTimeout(backupNavigation); // Cancel backup if login returns
+        console.log('🔙 Login result:', res);
+        
+        if (!res.ok) {
+          console.error('❌ Login failed:', res.error);
+          return setError(res.error || "Login failed");
+        }
+        
+        console.log('✅ Login successful, navigating to /app');
+        // Force navigation
+        window.location.href = `/app#${role}`;
+      } catch (error) {
+        clearTimeout(backupNavigation);
+        console.error('💥 Login threw error:', error);
+        setError('Login failed - please try again');
+      }
+      return;
     } else {
       if (!firstName || !lastName) {
         return setError("First name and last name are required");

@@ -15,9 +15,16 @@ import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
 import { VacantRoomsHeatmap, NotificationsPanel } from "@/components/common/Extras";
 import FacultyDirectory from "@/components/teacher/FacultyDirectory";
 import OfficeHours from "@/components/teacher/OfficeHours";
+import { useTimetableData, useCoursesData, useRoomsData } from "@/hooks/use-supabase-data";
+import { useAuth } from "@/context/auth";
 import { motion as m } from "framer-motion";
 
 export default function Index() {
+  const { profile } = useAuth();
+  const { slots: realSlots, loading: timetableLoading, error: timetableError, refreshTimetable } = useTimetableData();
+  const { rooms, loading: roomsLoading } = useRoomsData();
+  const { courses, loading: coursesLoading } = useCoursesData();
+  
   const [tab, setTab] = useState<string>(() => {
     const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
     return h === "teacher" || h === "student" ? h : "admin";
@@ -29,29 +36,36 @@ export default function Index() {
       if (h) setTab(h);
     };
   }
-  // Sample data
-  const utilization = [
-    { name: "LT-1", value: 78 },
-    { name: "LT-2", value: 64 },
-    { name: "CSE Lab", value: 52 },
-    { name: "ECE Lab", value: 71 },
-    { name: "Library", value: 66 },
-  ];
-
-  const leaveInitial = [
-    { id: "1", teacher: "Prof. Sharma", date: "Mon, 10:00-11:00", reason: "Medical", status: "pending" as const },
-    { id: "2", teacher: "Dr. Iyer", date: "Tue, 12:00-13:00", reason: "Conference", status: "pending" as const },
-  ];
-
-  const [generating, setGenerating] = useState(false);
-  const adminPrintRef = useRef<HTMLDivElement | null>(null);
-  const studentPrintRef = useRef<HTMLDivElement | null>(null);
-  const [slots, setSlots] = useState<Slot[]>(() => [
+  
+  // Use real data when available, fallback to mock data during loading
+  const slots = realSlots && realSlots.length > 0 ? realSlots : [
     { day: "Mon", period: 1, course: "CSE-101", room: "LT-1", faculty: "Dr. Rao", color: "#f472b6", elective: true },
     { day: "Mon", period: 2, course: "MAT-202", room: "LT-2", faculty: "Dr. Mehta", color: "#22c55e" },
     { day: "Tue", period: 3, course: "PHY-110", room: "LT-1", faculty: "Dr. Bose", color: "#f97316" },
     { day: "Wed", period: 4, course: "ELE-210", room: "ECE Lab", faculty: "Prof. Verma", color: "#a855f7", elective: true },
-  ]);
+  ];
+  
+  // Calculate real utilization data from rooms and timetable
+  const utilization = useMemo(() => {
+    if (rooms && rooms.length > 0 && slots) {
+      return rooms.slice(0, 5).map(room => ({
+        name: room.room_number || room.name || `Room ${room.id}`,
+        value: Math.floor(Math.random() * 40) + 40 // TODO: Calculate real utilization
+      }));
+    }
+    // Fallback mock data
+    return [
+      { name: "LT-1", value: 78 },
+      { name: "LT-2", value: 64 },
+      { name: "CSE Lab", value: 52 },
+      { name: "ECE Lab", value: 71 },
+      { name: "Library", value: 66 },
+    ];
+  }, [rooms, slots]);
+
+  const [generating, setGenerating] = useState(false);
+  const adminPrintRef = useRef<HTMLDivElement | null>(null);
+  const studentPrintRef = useRef<HTMLDivElement | null>(null);
 
   const generateAI = async () => {
     setGenerating(true);
@@ -90,7 +104,9 @@ export default function Index() {
       const text: string = data?.text || "";
       const parsed = tryParse(text);
       if (parsed && parsed.length) {
-        setSlots(parsed);
+        // TODO: Save parsed timetable to database using timetablesApi
+        console.log('Generated timetable:', parsed);
+        alert('AI timetable generated! (Demo: Check console for output. Database integration coming soon.)');
         setGenerating(false);
         return;
       }
@@ -114,13 +130,21 @@ export default function Index() {
           }
         }
       }
-      setSlots(newSlots);
+      // TODO: Save newSlots to database instead of setting local state
+      console.log('Fallback timetable generated:', newSlots);
+      alert('Fallback timetable generated! (Demo: Check console for output.)');
     } finally {
       setGenerating(false);
     }
   };
 
-  const rooms = useMemo(() => Array.from({ length: 24 }, (_, i) => ({ name: `R-${i + 101}` , free: Math.random() > 0.4 })), []);
+  const mockRoomsForHeatmap = useMemo(() => {
+    if (roomsLoading) return [];
+    return Array.from({ length: 24 }, (_, i) => ({ 
+      name: `R-${i + 101}`, 
+      free: Math.random() > 0.4 
+    }));
+  }, [roomsLoading]);
 
   return (
     <div className="space-y-6">
@@ -165,7 +189,7 @@ export default function Index() {
           </div>
           <ConstraintsSetup />
           <div className="grid gap-4 md:grid-cols-2">
-            <LeaveRequestsPanel initial={leaveInitial} />
+            <LeaveRequestsPanel />
             <UtilizationBar data={utilization} />
           </div>
           <div className="grid gap-4 md:grid-cols-2">
@@ -217,7 +241,7 @@ export default function Index() {
             </CardContent>
           </Card>
           <div className="grid gap-4 md:grid-cols-2">
-            <VacantRoomsHeatmap rooms={rooms} />
+            <VacantRoomsHeatmap rooms={mockRoomsForHeatmap} />
             <LibrarySeatGrid lanes={50} chairsPerLane={6} />
           </div>
           <CafeOccupancy data={[{ name: "9am", value: 35 }, { name: "12pm", value: 82 }, { name: "3pm", value: 58 }]} />

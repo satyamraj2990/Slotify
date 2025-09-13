@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useAuth } from '@/context/auth';
-import { timetablesApi, coursesApi, roomsApi, type Timetable } from '@/lib/api';
+import { timetablesApi, coursesApi, roomsApi } from '@/lib/api';
+import { type Timetable } from '@/lib/supabase';
 
 // Convert Supabase timetable format to your current Slot format
 export interface Slot {
