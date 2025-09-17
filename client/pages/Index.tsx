@@ -10,6 +10,7 @@ import { ExpertiseMappingPanel, WorkloadBalancerPanel, InfraUtilReport, CourseOn
 import { RegisterTeacher, RegisterCourse, ConstraintsSetup } from "@/components/admin/Registry";
 import { CreditProgressDashboard, StudyPlannerPanel } from "@/components/student/ProgressPlanner";
 import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPanels";
+import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
 import { VacantRoomsHeatmap, NotificationsPanel } from "@/components/common/Extras";
@@ -183,6 +184,7 @@ export default function Index() {
 
         <TabsContent value="admin" className="space-y-4">
           <UploadDataPanel />
+          <TimetableGenerator />
           <div className="grid gap-4 md:grid-cols-2">
             <RegisterTeacher />
             <RegisterCourse />

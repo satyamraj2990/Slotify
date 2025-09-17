@@ -482,6 +482,19 @@ export const librarySeatsApi = {
     return data as LibrarySeat;
   },
 
+  // Update seat (admin)
+  async update(id: string, updates: Partial<LibrarySeat>) {
+    const { data, error } = await supabase
+      .from('library_seats')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select()
+      .single();
+    
+    if (error) throw error;
+    return data as LibrarySeat;
+  },
+
   // Initialize seats (admin only) - creates the grid
   async initializeSeats(lanes: number = 50, seatsPerLane: number = 6) {
     const seats = [];
@@ -506,6 +519,51 @@ export const librarySeatsApi = {
 };
 
 // Office Hours API
+// Timetable Generation API
+export const timetableGenerationApi = {
+  // Generate new timetable
+  async generate(request: { semester: string; year: number; constraints?: any; options?: any }) {
+    const response = await fetch('/api/timetable/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(request),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to generate timetable');
+    }
+    
+    return response.json();
+  },
+
+  // Export timetable as CSV
+  async exportCSV(semester: string, year: number) {
+    const response = await fetch(`/api/timetable/export?semester=${semester}&year=${year}&format=csv`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to export timetable');
+    }
+    
+    return response.blob();
+  },
+
+  // Download CSV file
+  async downloadCSV(semester: string, year: number) {
+    const blob = await this.exportCSV(semester, year);
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `timetable_${semester}_${year}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    window.URL.revokeObjectURL(url);
+    document.body.removeChild(a);
+  }
+};
+
 export const officeHoursApi = {
   // Get all office hours
   async getAll() {
@@ -593,6 +651,23 @@ export const officeHoursApi = {
       .select(`
         *,
         teacher:profiles!office_hours_teacher_id_fkey(*)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data as OfficeHour;
+  },
+
+  // Update office hours (admin/teacher)
+  async update(id: string, updates: Partial<OfficeHour>) {
+    const { data, error } = await supabase
+      .from('office_hours')
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq('id', id)
+      .select(`
+        *,
+        teacher:profiles!office_hours_teacher_id_fkey(*),
+        booked_by_profile:profiles!office_hours_booked_by_fkey(*)
       `)
       .single();
     

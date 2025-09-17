@@ -3,6 +3,7 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
+import { handleTimetableGeneration, handleTimetableExport } from "./routes/timetable-generation";
 
 export function createServer() {
   const app = express();
@@ -19,6 +20,10 @@ export function createServer() {
   });
 
   app.get("/api/demo", handleDemo);
+
+  // Timetable generation routes
+  app.post("/api/timetable/generate", handleTimetableGeneration);
+  app.get("/api/timetable/export", handleTimetableExport);
 
   // Gemini proxy
   app.post("/api/gemini/generate", async (req, res) => {
