@@ -13,6 +13,7 @@ import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPan
 import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
+import { useToast } from "@/hooks/use-toast";
 import { VacantRoomsHeatmap, NotificationsPanel } from "@/components/common/Extras";
 import FacultyDirectory from "@/components/teacher/FacultyDirectory";
 import OfficeHours from "@/components/teacher/OfficeHours";
@@ -25,11 +26,20 @@ export default function Index() {
   const { slots: realSlots, loading: timetableLoading, error: timetableError, refreshTimetable } = useTimetableData();
   const { rooms, loading: roomsLoading } = useRoomsData();
   const { courses, loading: coursesLoading } = useCoursesData();
+  const { toast } = useToast();
+  
+  const getRandomColor = () => {
+    const colors = ["#6366f1", "#22c55e", "#f97316", "#06b6d4", "#a855f7", "#f472b6", "#84cc16"];
+    return colors[Math.floor(Math.random() * colors.length)];
+  };
   
   const [tab, setTab] = useState<string>(() => {
     const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
     return h === "teacher" || h === "student" ? h : "admin";
   });
+  const [generatedSlots, setGeneratedSlots] = useState<Slot[]>([]);
+  const [generating, setGenerating] = useState(false);
+  
   // keep tab in sync with hash changes
   if (typeof window !== "undefined") {
     window.onhashchange = () => {
@@ -38,13 +48,14 @@ export default function Index() {
     };
   }
   
-  // Use real data when available, fallback to mock data during loading
-  const slots = realSlots && realSlots.length > 0 ? realSlots : [
-    { day: "Mon", period: 1, course: "CSE-101", room: "LT-1", faculty: "Dr. Rao", color: "#f472b6", elective: true },
-    { day: "Mon", period: 2, course: "MAT-202", room: "LT-2", faculty: "Dr. Mehta", color: "#22c55e" },
-    { day: "Tue", period: 3, course: "PHY-110", room: "LT-1", faculty: "Dr. Bose", color: "#f97316" },
-    { day: "Wed", period: 4, course: "ELE-210", room: "ECE Lab", faculty: "Prof. Verma", color: "#a855f7", elective: true },
-  ];
+  // Use generated slots if available, otherwise real data, otherwise fallback to mock data
+  const slots = generatedSlots.length > 0 ? generatedSlots : 
+               (realSlots && realSlots.length > 0 ? realSlots : [
+                 { day: "Mon", period: 1, course: "CSE-101", room: "LT-1", faculty: "Dr. Rao", color: "#f472b6", elective: true },
+                 { day: "Mon", period: 2, course: "MAT-202", room: "LT-2", faculty: "Dr. Mehta", color: "#22c55e" },
+                 { day: "Tue", period: 3, course: "PHY-110", room: "LT-1", faculty: "Dr. Bose", color: "#f97316" },
+                 { day: "Wed", period: 4, course: "ELE-210", room: "ECE Lab", faculty: "Prof. Verma", color: "#a855f7", elective: true },
+               ]);
   
   // Calculate real utilization data from rooms and timetable
   const utilization = useMemo(() => {
@@ -64,12 +75,15 @@ export default function Index() {
     ];
   }, [rooms, slots]);
 
-  const [generating, setGenerating] = useState(false);
   const adminPrintRef = useRef<HTMLDivElement | null>(null);
   const studentPrintRef = useRef<HTMLDivElement | null>(null);
 
   const generateAI = async () => {
     setGenerating(true);
+    toast({
+      title: "Generating Timetable",
+      description: "AI is creating your optimized schedule...",
+    });
 
     const sys = `Generate a conflict-free weekly timetable with 6 days (Mon-Sat) and 8 periods/day. Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course, room, faculty, elective (boolean). Avoid clashes per day/period/room/faculty. Keep 30-60% occupancy.`;
 
@@ -87,7 +101,7 @@ export default function Index() {
             room: s.room,
             faculty: s.faculty,
             elective: Boolean(s.elective),
-            color: s.elective ? "#f472b6" : undefined,
+            color: s.elective ? "#f472b6" : getRandomColor(),
           }))
           .filter((s: any) => s.day && s.period);
       } catch {
@@ -105,10 +119,12 @@ export default function Index() {
       const text: string = data?.text || "";
       const parsed = tryParse(text);
       if (parsed && parsed.length) {
-        // TODO: Save parsed timetable to database using timetablesApi
         console.log('Generated timetable:', parsed);
-        alert('AI timetable generated! (Demo: Check console for output. Database integration coming soon.)');
-        setGenerating(false);
+        setGeneratedSlots(parsed);
+        toast({
+          title: "Success!",
+          description: `Generated ${parsed.length} timetable slots`,
+        });
         return;
       }
       throw new Error("Bad AI response");
@@ -131,9 +147,12 @@ export default function Index() {
           }
         }
       }
-      // TODO: Save newSlots to database instead of setting local state
       console.log('Fallback timetable generated:', newSlots);
-      alert('Fallback timetable generated! (Demo: Check console for output.)');
+      setGeneratedSlots(newSlots);
+      toast({
+        title: "Generated Fallback Timetable",
+        description: `Created ${newSlots.length} timetable slots`,
+      });
     } finally {
       setGenerating(false);
     }
@@ -160,6 +179,27 @@ export default function Index() {
               <Button id="generate" onClick={generateAI} disabled={generating} className="bg-gradient-to-r from-primary to-accent">
                 {generating ? "Generating..." : "One-click Generate"}
               </Button>
+              {generatedSlots.length > 0 && (
+                <>
+                  <Button variant="outline" onClick={() => {
+                    toast({
+                      title: "Save to Database",
+                      description: "Database integration coming soon - currently showing generated data",
+                    });
+                  }} className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100">
+                    Save to Database ({generatedSlots.length} slots)
+                  </Button>
+                  <Button variant="outline" onClick={() => {
+                    setGeneratedSlots([]);
+                    toast({
+                      title: "Generated Data Cleared",
+                      description: "Switched back to database timetable",
+                    });
+                  }} className="bg-red-50 border-red-200 text-red-700 hover:bg-red-100">
+                    Clear Generated
+                  </Button>
+                </>
+              )}
               <Button variant="outline" onClick={() => exportTimetablePDF(slots, 8)}>Export PDF</Button>
               <Button variant="outline" onClick={() => exportTimetableCSV(slots, "timetable.csv")}>Export Excel</Button>
               <Button variant="outline" onClick={() => exportTimetableICS(slots, "timetable.ics")}>Export ICS</Button>

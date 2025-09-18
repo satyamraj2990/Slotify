@@ -238,6 +238,33 @@ export const timetablesApi = {
     });
 
     return conflicts as Timetable[];
+  },
+
+  // Bulk save timetable entries (admin only) 
+  async bulkSave(timetables: Omit<Timetable, 'id' | 'created_at' | 'updated_at' | 'created_by'>[]) {
+    // First, clear existing timetables for the same semester/year
+    if (timetables.length > 0) {
+      const { semester, year } = timetables[0];
+      await supabase
+        .from('timetables')
+        .delete()
+        .eq('semester', semester)
+        .eq('year', year);
+    }
+
+    // Insert new timetables
+    const { data, error } = await supabase
+      .from('timetables')
+      .insert(timetables)
+      .select(`
+        *,
+        course:courses(*),
+        teacher:profiles!timetables_teacher_id_fkey(*),
+        room:rooms(*)
+      `);
+    
+    if (error) throw error;
+    return data as Timetable[];
   }
 };
 
