@@ -305,34 +305,79 @@ export const profilesApi = {
     return data as Profile[];
   },
 
-  // Create new profile (typically for teacher registration)
+  // Create new profile (teacher registration by admin)
   async create(profile: Omit<Profile, 'id' | 'created_at' | 'updated_at'>) {
-    // Note: This creates a profile without auth user - for demo purposes
-    // In production, you'd want to integrate with proper user signup flow
-    
-    // Generate a temporary UUID for demo (in production this would come from auth)
-    const tempId = crypto.randomUUID();
-    
-    const { data, error } = await supabase
-      .from('profiles')
-      .insert({
-        id: tempId,
+    try {
+      // First, create an auth user (this will trigger the profile creation automatically)
+      const tempPassword = Math.random().toString(36).slice(-8) + 'A1!'; // Generate temp password
+      
+      const { data: authData, error: authError } = await supabase.auth.admin.createUser({
         email: profile.email,
-        role: profile.role,
-        first_name: profile.first_name,
-        last_name: profile.last_name,
-        display_name: profile.display_name,
-        department: profile.department,
-        phone: profile.phone,
-        subjects: profile.subjects,
-        weekly_workload: profile.weekly_workload,
-        availability: profile.availability
-      })
-      .select()
-      .single();
+        password: tempPassword,
+        email_confirm: true, // Skip email confirmation for admin-created users
+        user_metadata: {
+          first_name: profile.first_name,
+          last_name: profile.last_name,
+          role: profile.role,
+          department: profile.department,
+          display_name: profile.display_name
+        }
+      });
 
-    if (error) throw error;
-    return data as Profile;
+      if (authError) {
+        // If admin.createUser fails (might not have service key), fall back to direct insert
+        console.warn('Admin createUser failed, using direct profile insert:', authError.message);
+        
+        // Generate a UUID that mimics Supabase auth format
+        const tempId = crypto.randomUUID();
+        
+        const { data, error } = await supabase
+          .from('profiles')
+          .insert({
+            id: tempId,
+            email: profile.email,
+            role: profile.role,
+            first_name: profile.first_name,
+            last_name: profile.last_name,
+            display_name: profile.display_name,
+            department: profile.department,
+            phone: profile.phone,
+            subjects: profile.subjects,
+            weekly_workload: profile.weekly_workload,
+            availability: profile.availability
+          })
+          .select()
+          .single();
+
+        if (error) throw error;
+        return data as Profile;
+      }
+
+      // If auth user was created successfully, update the auto-created profile with additional fields
+      if (authData.user) {
+        const { data: updatedProfile, error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            display_name: profile.display_name,
+            department: profile.department,
+            phone: profile.phone,
+            subjects: profile.subjects,
+            weekly_workload: profile.weekly_workload,
+            availability: profile.availability
+          })
+          .eq('id', authData.user.id)
+          .select()
+          .single();
+
+        if (updateError) throw updateError;
+        return updatedProfile as Profile;
+      }
+
+      throw new Error('Failed to create user');
+    } catch (error) {
+      console.error('Profile creation error:', error);
+      throw error;
+    }
   },
 
   // Update profile

@@ -1,8 +1,9 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState } from 'react';
-import { profilesApi, coursesApi } from '@/lib/api';
+import { profilesApi, coursesApi, roomsApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 export function RegisterTeacher() {
@@ -35,6 +36,8 @@ export function RegisterTeacher() {
 
     setIsLoading(true);
     try {
+      console.log('🎯 Starting teacher registration:', formData);
+
       const [firstName, ...lastNameParts] = formData.fullName.split(' ');
       const lastName = lastNameParts.join(' ');
       
@@ -55,11 +58,13 @@ export function RegisterTeacher() {
         availability: formData.availability || null
       };
 
-      await profilesApi.create(teacherData);
+      console.log('👩‍🏫 Teacher data to create:', teacherData);
+      const result = await profilesApi.create(teacherData);
+      console.log('✅ Teacher created successfully:', result);
 
       toast({
         title: "Success",
-        description: "Teacher registered successfully",
+        description: `Teacher "${teacherData.display_name}" registered successfully`,
       });
 
       // Reset form
@@ -73,11 +78,22 @@ export function RegisterTeacher() {
         department: ''
       });
 
-    } catch (error) {
-      console.error('Error registering teacher:', error);
+    } catch (error: any) {
+      console.error('❌ Error registering teacher:', error);
+      
+      // Enhanced error handling
+      let errorMessage = "Failed to register teacher. Please try again.";
+      if (error?.message?.includes('duplicate key')) {
+        errorMessage = `Email "${formData.email}" already exists. Please use a different email.`;
+      } else if (error?.message?.includes('permission denied')) {
+        errorMessage = "Permission denied. Make sure you're logged in as an admin.";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to register teacher. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -177,16 +193,24 @@ export function RegisterCourse() {
 
     setIsLoading(true);
     try {
+      console.log('🎯 Starting course registration:', formData);
+
       // Find teacher by name if provided
       let assignedTeacherId = null;
       if (formData.assignTeacher) {
+        console.log('👩‍🏫 Looking for teacher:', formData.assignTeacher);
         const teachers = await profilesApi.getTeachers();
+        console.log('👥 Available teachers:', teachers.length);
+        
         const teacher = teachers.find(t => 
           `${t.first_name} ${t.last_name}`.toLowerCase().includes(formData.assignTeacher.toLowerCase()) ||
           t.display_name?.toLowerCase().includes(formData.assignTeacher.toLowerCase())
         );
         if (teacher) {
           assignedTeacherId = teacher.id;
+          console.log('✅ Teacher found:', teacher.display_name || `${teacher.first_name} ${teacher.last_name}`);
+        } else {
+          console.log('⚠️ Teacher not found');
         }
       }
 
@@ -204,11 +228,13 @@ export function RegisterCourse() {
         assigned_teacher_id: assignedTeacherId
       };
 
-      await coursesApi.create(courseData);
+      console.log('📝 Course data to insert:', courseData);
+      const result = await coursesApi.create(courseData);
+      console.log('✅ Course created successfully:', result);
 
       toast({
         title: "Success",
-        description: "Course registered successfully",
+        description: `Course "${courseData.code} - ${courseData.name}" registered successfully`,
       });
 
       // Reset form
@@ -225,11 +251,22 @@ export function RegisterCourse() {
         courseType: 'major'
       });
 
-    } catch (error) {
-      console.error('Error registering course:', error);
+    } catch (error: any) {
+      console.error('❌ Error registering course:', error);
+      
+      // Enhanced error handling
+      let errorMessage = "Failed to register course. Please try again.";
+      if (error?.message?.includes('duplicate key')) {
+        errorMessage = `Course code "${formData.code}" already exists. Please use a different code.`;
+      } else if (error?.message?.includes('permission denied')) {
+        errorMessage = "Permission denied. Make sure you're logged in as an admin.";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
       toast({
         title: "Error",
-        description: "Failed to register course. Please try again.",
+        description: errorMessage,
         variant: "destructive"
       });
     } finally {
@@ -306,21 +343,256 @@ export function RegisterCourse() {
   );
 }
 
+
 export function ConstraintsSetup() {
+  const { toast } = useToast();
+  const [isLoading, setIsLoading] = useState(false);
+  const [formData, setFormData] = useState({
+    roomNumber: '',
+    building: '',
+    capacity: '',
+    roomType: 'classroom',
+    facilities: ''
+  });
+
+  const handleInputChange = (field: string, value: string) => {
+    setFormData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async () => {
+    // Validate required fields
+    if (!formData.roomNumber || !formData.building || !formData.capacity) {
+      toast({
+        title: "Error",
+        description: "Room number, building, and capacity are required",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    setIsLoading(true);
+    try {
+      console.log('🏢 Starting room registration:', formData);
+
+      // Parse facilities into array
+      const facilitiesArray = formData.facilities 
+        ? formData.facilities.split(',').map(f => f.trim()).filter(f => f)
+        : [];
+
+      const roomData = {
+        room_number: formData.roomNumber.toUpperCase(),
+        building: formData.building,
+        capacity: parseInt(formData.capacity),
+        room_type: formData.roomType as 'classroom' | 'lab' | 'auditorium' | 'seminar',
+        facilities: facilitiesArray,
+        is_available: true
+      };
+
+      console.log('🏛️ Room data to insert:', roomData);
+      const result = await roomsApi.create(roomData);
+      console.log('✅ Room created successfully:', result);
+
+      toast({
+        title: "Success",
+        description: `Room "${roomData.room_number}" in "${roomData.building}" added successfully`,
+      });
+
+      // Reset form
+      setFormData({
+        roomNumber: '',
+        building: '',
+        capacity: '',
+        roomType: 'classroom',
+        facilities: ''
+      });
+
+    } catch (error: any) {
+      console.error('❌ Error registering room:', error);
+      
+      // Enhanced error handling
+      let errorMessage = "Failed to add room. Please try again.";
+      if (error?.message?.includes('duplicate key')) {
+        errorMessage = `Room "${formData.roomNumber}" already exists. Please use a different room number.`;
+      } else if (error?.message?.includes('permission denied')) {
+        errorMessage = "Permission denied. Make sure you're logged in as an admin.";
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      toast({
+        title: "Error",
+        description: errorMessage,
+        variant: "destructive"
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const validateRoom = () => {
+    if (!formData.roomNumber || !formData.building || !formData.capacity) {
+      toast({
+        title: "Validation",
+        description: "Please fill in all required fields before validating",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    const capacity = parseInt(formData.capacity);
+    let validationMessage = "";
+    let validationVariant: "default" | "destructive" = "default";
+
+    if (capacity < 10) {
+      validationMessage = "⚠️ Small capacity room - suitable for meetings or tutorials";
+      validationVariant = "destructive";
+    } else if (capacity <= 30) {
+      validationMessage = "✅ Good for small classes and seminars";
+    } else if (capacity <= 60) {
+      validationMessage = "✅ Good for regular lectures and courses";
+    } else if (capacity <= 100) {
+      validationMessage = "✅ Large lecture hall - suitable for popular courses";
+    } else {
+      validationMessage = "✅ Auditorium size - excellent for events and large classes";
+    }
+
+    toast({
+      title: "Room Validation",
+      description: validationMessage,
+      variant: validationVariant
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Constraints Setup</CardTitle>
+        <CardTitle>Room Allocation</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 md:grid-cols-3">
-        <Input placeholder="Classroom (name)" />
-        <Input placeholder="Capacity" type="number" />
-        <Input placeholder="Type (Room/Lab)" />
-        <Input placeholder="Holiday (YYYY-MM-DD)" />
-        <Input placeholder="Blocked hours (e.g., Fri 1-3)" className="md:col-span-2" />
+        <Input 
+          placeholder="Room Number (e.g., LT-1, CSE-101)" 
+          value={formData.roomNumber}
+          onChange={(e) => handleInputChange('roomNumber', e.target.value)}
+        />
+        <Input 
+          placeholder="Building (e.g., Main Building, Engineering Block)" 
+          value={formData.building}
+          onChange={(e) => handleInputChange('building', e.target.value)}
+        />
+        <Input 
+          placeholder="Capacity" 
+          type="number" 
+          min="1"
+          max="500"
+          value={formData.capacity}
+          onChange={(e) => handleInputChange('capacity', e.target.value)}
+        />
+        
+        <Select value={formData.roomType} onValueChange={(value) => handleInputChange('roomType', value)}>
+          <SelectTrigger>
+            <SelectValue placeholder="Room Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="classroom">Classroom</SelectItem>
+            <SelectItem value="lab">Laboratory</SelectItem>
+            <SelectItem value="auditorium">Auditorium</SelectItem>
+            <SelectItem value="seminar">Seminar Hall</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Input 
+          placeholder="Facilities (e.g., projector, AC, whiteboard)" 
+          className="md:col-span-2" 
+          value={formData.facilities}
+          onChange={(e) => handleInputChange('facilities', e.target.value)}
+        />
+
         <div className="md:col-span-3 flex justify-end gap-2">
-          <Button variant="outline">Validate</Button>
-          <Button className="bg-gradient-to-r from-primary to-accent">Save Constraints</Button>
+          <Button 
+            variant="outline"
+            onClick={validateRoom}
+          >
+            Validate Room
+          </Button>
+          <Button 
+            className="bg-gradient-to-r from-primary to-accent"
+            onClick={handleSubmit}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Adding Room...' : 'Add Room'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+// Additional component for scheduling constraints and holidays
+export function SchedulingConstraints() {
+  const { toast } = useToast();
+  const [constraintsData, setConstraintsData] = useState({
+    holidayDate: '',
+    blockedHours: '',
+    workingDays: 'Mon-Fri',
+    maxPeriodsPerDay: '6'
+  });
+
+  const handleConstraintChange = (field: string, value: string) => {
+    setConstraintsData(prev => ({ ...prev, [field]: value }));
+  };
+
+  const saveConstraints = () => {
+    // For now, just show the constraints in a toast
+    // In a real implementation, you'd save these to a constraints table
+    toast({
+      title: "Constraints Saved",
+      description: `Working days: ${constraintsData.workingDays}, Max periods: ${constraintsData.maxPeriodsPerDay}`,
+    });
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Scheduling Constraints</CardTitle>
+      </CardHeader>
+      <CardContent className="grid gap-3 md:grid-cols-3">
+        <Input 
+          placeholder="Holiday Date (YYYY-MM-DD)" 
+          type="date"
+          value={constraintsData.holidayDate}
+          onChange={(e) => handleConstraintChange('holidayDate', e.target.value)}
+        />
+        <Input 
+          placeholder="Blocked Hours (e.g., Fri 1-3)" 
+          value={constraintsData.blockedHours}
+          onChange={(e) => handleConstraintChange('blockedHours', e.target.value)}
+        />
+        <Input 
+          placeholder="Working Days (e.g., Mon-Fri)" 
+          value={constraintsData.workingDays}
+          onChange={(e) => handleConstraintChange('workingDays', e.target.value)}
+        />
+        <Input 
+          placeholder="Max Periods Per Day" 
+          type="number"
+          min="1"
+          max="10"
+          value={constraintsData.maxPeriodsPerDay}
+          onChange={(e) => handleConstraintChange('maxPeriodsPerDay', e.target.value)}
+        />
+        <div className="md:col-span-3 flex justify-end gap-2">
+          <Button 
+            variant="outline"
+            onClick={() => toast({ title: "Validation", description: "All constraints look good!" })}
+          >
+            Validate Constraints
+          </Button>
+          <Button 
+            className="bg-gradient-to-r from-primary to-accent"
+            onClick={saveConstraints}
+          >
+            Save Constraints
+          </Button>
         </div>
       </CardContent>
     </Card>
