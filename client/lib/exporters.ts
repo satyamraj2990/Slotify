@@ -131,12 +131,18 @@ function htmlTable(slots: ExportSlot[], periods = 8) {
   </body></html>`;
 }
 
-export function exportTimetablePDF(slots: ExportSlot[], periods = 8) {
+export function exportTimetablePDF(slots: ExportSlot[], periods = 8, filename?: string) {
   const w = window.open("", "_blank");
   if (!w) return;
+  
+  // Set document title to filename if provided
+  const title = filename ? filename.replace('.pdf', '') : 'Timetable';
+  const htmlContent = htmlTable(slots, periods).replace('<h1>Slotiफाই</h1>', `<h1>Slotiफाई - ${title}</h1>`);
+  
   w.document.open();
-  w.document.write(htmlTable(slots, periods));
+  w.document.write(htmlContent);
   w.document.close();
+  
   // Give the browser a tick to render before printing
   setTimeout(() => {
     w.focus();

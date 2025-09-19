@@ -32,7 +32,15 @@ export function UploadDataPanel() {
   );
 }
 
-export type LeaveReq = { id: string; teacher: string; date: string; reason: string; status: "pending" | "approved" | "rejected" };
+export type LeaveReq = { 
+  id: string; 
+  teacher: string; 
+  date: string; 
+  reason: string; 
+  status: "pending" | "approved" | "rejected";
+  substitute_name?: string;
+  substitute_contact?: string;
+};
 
 export function LeaveRequestsPanel() {
   const { user } = useAuth();
@@ -44,21 +52,23 @@ export function LeaveRequestsPanel() {
     const fetchLeaveRequests = async () => {
       try {
         const data = await leaveRequestsApi.getAll();
-        // Convert Supabase format to component format
+        // Convert Supabase format to component format with substitute info
         const converted = data.map(req => ({
           id: req.id,
           teacher: req.teacher?.display_name || `${req.teacher?.first_name} ${req.teacher?.last_name}` || 'Unknown Teacher',
-          date: new Date(req.leave_date).toLocaleDateString(),
+          date: new Date(req.leave_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' }),
           reason: req.reason,
-          status: req.status
+          status: req.status,
+          substitute_name: req.substitute_name,
+          substitute_contact: req.substitute_contact
         }));
         setItems(converted);
       } catch (error) {
         console.error('Error fetching leave requests:', error);
         // Fallback to sample data
         setItems([
-          { id: "1", teacher: "Prof. Sharma", date: "Mon, 10:00-11:00", reason: "Medical", status: "pending" },
-          { id: "2", teacher: "Dr. Iyer", date: "Tue, 12:00-13:00", reason: "Conference", status: "pending" },
+          { id: "1", teacher: "Prof. Sharma", date: "Mon, Dec 9", reason: "Medical", status: "pending", substitute_name: "Dr. Patel" },
+          { id: "2", teacher: "Dr. Iyer", date: "Tue, Dec 10", reason: "Conference", status: "pending" },
         ]);
       } finally {
         setLoading(false);
@@ -74,6 +84,18 @@ export function LeaveRequestsPanel() {
       if (!user) throw new Error('User not authenticated');
       await leaveRequestsApi.updateStatus(id, status, user.id);
       setItems((arr) => arr.map((i) => (i.id === id ? { ...i, status } : i)));
+      
+      // If leave is approved, trigger emergency reallocation detection
+      if (status === 'approved') {
+        // Note: In a real implementation, this would trigger a background job
+        // to detect affected classes and create emergency reallocation records
+        console.log('Leave approved - checking for affected classes...', id);
+        
+        // You could emit an event or call a service here to:
+        // 1. Find all timetable entries for this teacher on the leave date
+        // 2. Create emergency reallocation records for affected classes
+        // 3. Send notifications to admin about required reallocations
+      }
     } catch (error) {
       console.error('Error updating leave request:', error);
       // Still update UI optimistically
@@ -111,9 +133,12 @@ export function LeaveRequestsPanel() {
               <div>
                 <div className="font-medium">{r.teacher} • {r.date}</div>
                 <div className="text-sm text-muted-foreground">{r.reason}</div>
-                <div className="text-xs mt-1">
-                  Suggested substitute: <span className="font-medium">Dr. Patel</span>
-                </div>
+                {r.substitute_name && (
+                  <div className="text-xs mt-1">
+                    Substitute: <span className="font-medium">{r.substitute_name}</span>
+                    {r.substitute_contact && <span className="text-muted-foreground"> • {r.substitute_contact}</span>}
+                  </div>
+                )}
               </div>
               <div className="flex items-center gap-2">
                 <span className="text-xs px-2 py-1 rounded-full border capitalize">{r.status}</span>
@@ -127,7 +152,12 @@ export function LeaveRequestsPanel() {
                       <DialogDescription>{r.teacher} • {r.date}</DialogDescription>
                     </DialogHeader>
                     <div className="text-sm">Reason: {r.reason}</div>
-                    <div className="text-xs mt-2">Suggested substitute: <span className="font-medium">Dr. Patel</span></div>
+                    {r.substitute_name && (
+                      <div className="text-xs mt-2">
+                        Substitute: <span className="font-medium">{r.substitute_name}</span>
+                        {r.substitute_contact && <span className="text-muted-foreground"> • {r.substitute_contact}</span>}
+                      </div>
+                    )}
                     <DialogFooter>
                       <Button variant="outline" onClick={() => act(r.id, "rejected")}>Reject</Button>
                       <Button className="bg-gradient-to-r from-primary to-accent" onClick={() => act(r.id, "approved")}>Approve</Button>

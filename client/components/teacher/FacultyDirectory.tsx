@@ -31,22 +31,27 @@ export default function FacultyDirectory() {
         <CardDescription>Contact details, expertise, and office hours.</CardDescription>
       </CardHeader>
       <CardContent>
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 xl:grid-cols-3">
           {list.map((f) => (
-            <div key={f.id} className="rounded-xl border border-white/10 bg-card/40 p-4 backdrop-blur-xl">
-              <div className="text-lg font-semibold">{f.name}</div>
-              <div className="text-sm text-muted-foreground">{f.dept} • Office {f.office}</div>
-              <div className="mt-2 text-sm">{f.email} • {f.phone}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Consultation: {f.hours}</div>
-              <div className="mt-2 flex flex-wrap gap-1">
-                {f.expertise.map((e) => (
-                  <span key={e} className="rounded-full border border-pink-500/30 bg-pink-500/10 px-2 py-0.5 text-xs">{e}</span>
-                ))}
+            <div key={f.id} className="flex flex-col rounded-xl border border-white/10 bg-card/40 p-4 backdrop-blur-xl min-h-[280px]">
+              <div className="flex-grow">
+                <div className="text-lg font-semibold mb-1">{f.name}</div>
+                <div className="text-sm text-muted-foreground mb-2">{f.dept} • Office {f.office}</div>
+                <div className="text-sm mb-1 break-words">{f.email}</div>
+                <div className="text-sm mb-2">{f.phone}</div>
+                <div className="text-xs text-muted-foreground mb-3">Consultation: {f.hours}</div>
+                <div className="flex flex-wrap gap-1 mb-4">
+                  {f.expertise.map((e) => (
+                    <span key={e} className="rounded-full border border-pink-500/30 bg-pink-500/10 px-2 py-0.5 text-xs">{e}</span>
+                  ))}
+                </div>
               </div>
-              <div className="mt-3 flex gap-2">
+              <div className="flex flex-col gap-2 mt-auto">
                 <Dialog>
                   <DialogTrigger asChild>
-                    <Button size="sm" variant="outline" onClick={() => setActive(f)}>Contact</Button>
+                    <Button size="sm" variant="outline" onClick={() => setActive(f)} className="w-full">
+                      Contact
+                    </Button>
                   </DialogTrigger>
                   <DialogContent className="border-white/10 bg-background/80 backdrop-blur-xl">
                     <DialogHeader>
@@ -60,7 +65,9 @@ export default function FacultyDirectory() {
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
-                <Button size="sm" className="bg-gradient-to-r from-primary to-accent">Book Office Hours</Button>
+                <Button size="sm" className="bg-gradient-to-r from-primary to-accent w-full">
+                  Book Office Hours
+                </Button>
               </div>
             </div>
           ))}

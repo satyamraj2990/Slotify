@@ -103,6 +103,8 @@ export interface LeaveRequest {
   reason: string
   status: 'pending' | 'approved' | 'rejected'
   substitute_teacher_id?: string
+  substitute_name?: string
+  substitute_contact?: string
   substitute_suggested_by_ai: boolean
   approved_by?: string
   approved_at?: string
@@ -129,4 +131,39 @@ export interface OfficeHour {
   // Joined data
   teacher?: Profile
   booked_by_profile?: Profile
+}
+
+export interface EmergencyReallocation {
+  id: string
+  original_timetable_id: string
+  disruption_reason: string
+  new_teacher_id?: string
+  new_room_id?: string
+  new_day_of_week?: number
+  new_start_time?: string
+  new_end_time?: string
+  status: 'pending' | 'approved' | 'implemented' | 'rejected'
+  created_by?: string
+  approved_by?: string
+  implemented_at?: string
+  created_at: string
+  updated_at: string
+  // Joined data
+  original_timetable?: Timetable
+  new_teacher?: Profile
+  new_room?: Room
+  created_by_profile?: Profile
+  approved_by_profile?: Profile
+}
+
+export interface DisruptedClass {
+  id: string
+  course: Course
+  teacher: Profile
+  room: Room
+  day_of_week: number
+  start_time: string
+  end_time: string
+  disruption_reason: string
+  leave_request?: LeaveRequest
 }

@@ -430,9 +430,15 @@ export const leaveRequestsApi = {
 
   // Create leave request (teacher)
   async create(request: Omit<LeaveRequest, 'id' | 'created_at' | 'updated_at' | 'status' | 'substitute_suggested_by_ai'>) {
+    const requestWithDefaults = {
+      ...request,
+      status: 'pending' as const,
+      substitute_suggested_by_ai: false
+    };
+    
     const { data, error } = await supabase
       .from('leave_requests')
-      .insert([request])
+      .insert([requestWithDefaults])
       .select(`
         *,
         teacher:profiles!leave_requests_teacher_id_fkey(*)
@@ -745,5 +751,211 @@ export const officeHoursApi = {
     
     if (error) throw error;
     return data as OfficeHour;
+  }
+};
+
+// Emergency Reallocation API
+export const emergencyReallocationApi = {
+  // Get all disrupted classes (cancelled due to teacher leave, room issues, etc.)
+  async getDisruptedClasses() {
+    const { data, error } = await supabase
+      .from('timetables')
+      .select(`
+        *,
+        course:courses(*),
+        teacher:profiles!timetables_teacher_id_fkey(*),
+        room:rooms(*),
+        leave_request:leave_requests!inner(*)
+      `)
+      .eq('leave_requests.status', 'approved')
+      .eq('is_active', true);
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Find available substitute teachers for a specific time slot and subject
+  async findSubstituteTeachers(dayOfWeek: number, startTime: string, endTime: string, courseId: string) {
+    const { data: availableTeachers, error } = await supabase
+      .from('profiles')
+      .select(`
+        *,
+        conflicting_classes:timetables!inner(*)
+      `)
+      .eq('role', 'teacher')
+      .not('timetables.day_of_week', 'eq', dayOfWeek)
+      .not('timetables.start_time', 'gte', startTime)
+      .not('timetables.end_time', 'lte', endTime);
+    
+    if (error) throw error;
+    
+    // Filter out teachers who have conflicts and return available ones
+    const available = availableTeachers?.filter(teacher => 
+      !teacher.conflicting_classes || teacher.conflicting_classes.length === 0
+    ) || [];
+    
+    return available;
+  },
+
+  // Find available rooms for a specific time slot
+  async findAvailableRooms(dayOfWeek: number, startTime: string, endTime: string, requiredCapacity: number = 30) {
+    const { data: rooms, error } = await supabase
+      .from('rooms')
+      .select(`
+        *,
+        conflicting_bookings:timetables!inner(*)
+      `)
+      .eq('is_available', true)
+      .gte('capacity', requiredCapacity);
+    
+    if (error) throw error;
+    
+    // Filter out rooms that have conflicts
+    const available = rooms?.filter(room => {
+      const hasConflict = room.conflicting_bookings?.some((booking: any) => 
+        booking.day_of_week === dayOfWeek &&
+        booking.start_time <= endTime &&
+        booking.end_time >= startTime &&
+        booking.is_active
+      );
+      return !hasConflict;
+    }) || [];
+    
+    return available;
+  },
+
+  // Find alternative time slots for a class
+  async findAlternativeTimeSlots(courseId: string, teacherId: string, roomId: string) {
+    const { data: existingSlots, error } = await supabase
+      .from('timetables')
+      .select('day_of_week, start_time, end_time')
+      .eq('is_active', true);
+    
+    if (error) throw error;
+    
+    // Generate possible time slots (Mon-Fri, 9AM-5PM)
+    const possibleSlots = [];
+    for (let day = 1; day <= 5; day++) { // Monday to Friday
+      for (let hour = 9; hour < 17; hour++) {
+        const startTime = `${hour.toString().padStart(2, '0')}:00:00`;
+        const endTime = `${(hour + 1).toString().padStart(2, '0')}:00:00`;
+        
+        const hasConflict = existingSlots?.some(slot => 
+          slot.day_of_week === day &&
+          slot.start_time <= endTime &&
+          slot.end_time >= startTime
+        );
+        
+        if (!hasConflict) {
+          possibleSlots.push({
+            day_of_week: day,
+            start_time: startTime,
+            end_time: endTime,
+            day_name: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][day]
+          });
+        }
+      }
+    }
+    
+    return possibleSlots;
+  },
+
+  // Create an emergency reallocation record
+  async createReallocation(reallocationData: {
+    original_timetable_id: string;
+    disruption_reason: string;
+    new_teacher_id?: string;
+    new_room_id?: string;
+    new_day_of_week?: number;
+    new_start_time?: string;
+    new_end_time?: string;
+    status: 'pending' | 'approved' | 'implemented';
+    created_by: string;
+  }) {
+    const { data, error } = await supabase
+      .from('emergency_reallocations')
+      .insert([reallocationData])
+      .select(`
+        *,
+        original_timetable:timetables!emergency_reallocations_original_timetable_id_fkey(*),
+        new_teacher:profiles!emergency_reallocations_new_teacher_id_fkey(*),
+        new_room:rooms!emergency_reallocations_new_room_id_fkey(*),
+        created_by_profile:profiles!emergency_reallocations_created_by_fkey(*)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Update timetable with reallocation (implement the change)
+  async implementReallocation(reallocationId: string, updates: {
+    teacher_id?: string;
+    room_id?: string;
+    day_of_week?: number;
+    start_time?: string;
+    end_time?: string;
+  }) {
+    // Get the reallocation details
+    const { data: reallocation, error: fetchError } = await supabase
+      .from('emergency_reallocations')
+      .select('original_timetable_id')
+      .eq('id', reallocationId)
+      .single();
+    
+    if (fetchError) throw fetchError;
+    
+    // Update the original timetable
+    const { data: updatedTimetable, error: updateError } = await supabase
+      .from('timetables')
+      .update({ 
+        ...updates, 
+        updated_at: new Date().toISOString() 
+      })
+      .eq('id', reallocation.original_timetable_id)
+      .select(`
+        *,
+        course:courses(*),
+        teacher:profiles!timetables_teacher_id_fkey(*),
+        room:rooms(*)
+      `)
+      .single();
+    
+    if (updateError) throw updateError;
+    
+    // Mark reallocation as implemented
+    const { error: statusError } = await supabase
+      .from('emergency_reallocations')
+      .update({ 
+        status: 'implemented',
+        implemented_at: new Date().toISOString()
+      })
+      .eq('id', reallocationId);
+    
+    if (statusError) throw statusError;
+    
+    return updatedTimetable;
+  },
+
+  // Get all emergency reallocations
+  async getAllReallocations() {
+    const { data, error } = await supabase
+      .from('emergency_reallocations')
+      .select(`
+        *,
+        original_timetable:timetables!emergency_reallocations_original_timetable_id_fkey(
+          *,
+          course:courses(*),
+          teacher:profiles!timetables_teacher_id_fkey(*),
+          room:rooms(*)
+        ),
+        new_teacher:profiles!emergency_reallocations_new_teacher_id_fkey(*),
+        new_room:rooms!emergency_reallocations_new_room_id_fkey(*),
+        created_by_profile:profiles!emergency_reallocations_created_by_fkey(*)
+      `)
+      .order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
   }
 };
