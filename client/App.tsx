@@ -1,5 +1,6 @@
 import "./global.css";
 
+import React from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { createRoot } from "react-dom/client";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -50,6 +51,56 @@ function useDarkMode() {
   return { enabled, setEnabled };
 }
 
+function RoleBasedSidebar() {
+  const { profile } = useAuth();
+  
+  if (!profile) {
+    return (
+      <SidebarGroup>
+        <SidebarGroupLabel>Loading...</SidebarGroupLabel>
+      </SidebarGroup>
+    );
+  }
+  
+  // Get role-specific icon and text
+  const getRoleIcon = () => {
+    switch (profile.role) {
+      case "admin": return <CalendarClock />;
+      case "teacher": return <Users2 />;
+      case "student": 
+      default: return <BookOpenCheck />;
+    }
+  };
+  
+  const getRoleText = () => {
+    switch (profile.role) {
+      case "admin": return "Admin Panel";
+      case "teacher": return "Teacher Panel";
+      case "student":
+      default: return "Student Panel";
+    }
+  };
+  
+  const getRoleHash = () => {
+    return `#${profile.role}`;
+  };
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Dashboard</SidebarGroupLabel>
+      <SidebarMenu>
+        <SidebarMenuItem>
+          <SidebarMenuButton asChild>
+            <a href={getRoleHash()} className="flex items-center gap-2">
+              {getRoleIcon()} <span>{getRoleText()}</span>
+            </a>
+          </SidebarMenuButton>
+        </SidebarMenuItem>
+      </SidebarMenu>
+    </SidebarGroup>
+  );
+}
+
 const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { enabled, setEnabled } = useDarkMode();
   const loc = useLocation();
@@ -68,32 +119,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
           </div>
         </SidebarHeader>
         <SidebarContent>
-          <SidebarGroup>
-            <SidebarGroupLabel>Dashboards</SidebarGroupLabel>
-            <SidebarMenu>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="#admin" className="flex items-center gap-2">
-                    <CalendarClock /> <span>Admin</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="#teacher" className="flex items-center gap-2">
-                    <Users2 /> <span>Teacher</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-              <SidebarMenuItem>
-                <SidebarMenuButton asChild>
-                  <a href="#student" className="flex items-center gap-2">
-                    <BookOpenCheck /> <span>Student</span>
-                  </a>
-                </SidebarMenuButton>
-              </SidebarMenuItem>
-            </SidebarMenu>
-          </SidebarGroup>
+          <RoleBasedSidebar />
         </SidebarContent>
         <SidebarSeparator />
         <SidebarFooter>
@@ -142,14 +168,29 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
 
 function TopbarUser() {
   const { user, profile, logout } = useAuth();
-  if (!user || !profile) return null;
+  
+  // If no user, don't show anything
+  if (!user) return null;
+  
+  // Show logout button regardless of profile status
   return (
     <div className="text-xs flex items-center gap-2">
-      <span className="px-2 py-1 rounded-full border border-white/10 bg-secondary capitalize">
-        {profile.role}
-      </span>
-      <span className="text-sm">{profile.display_name || `${profile.first_name} ${profile.last_name}`}</span>
-      <button className="text-pink-400 hover:underline" onClick={logout}>Logout</button>
+      {profile ? (
+        <>
+          <span className="px-2 py-1 rounded-full border border-white/10 bg-secondary capitalize">
+            {profile.role}
+          </span>
+          <span className="text-sm">{profile.display_name || `${profile.first_name} ${profile.last_name}` || user.email}</span>
+        </>
+      ) : (
+        <span className="text-sm">{user.email}</span>
+      )}
+      <button 
+        className="bg-pink-500 text-white px-3 py-1 rounded hover:bg-pink-600 font-semibold transition-colors" 
+        onClick={logout}
+      >
+        Logout
+      </button>
     </div>
   );
 }

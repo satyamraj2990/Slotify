@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,31 +22,39 @@ import { useAuth } from "@/context/auth";
 import { motion as m } from "framer-motion";
 
 export default function Index() {
-  const { profile } = useAuth();
+  // ALL HOOKS MUST BE AT THE TOP - NEVER AFTER CONDITIONAL RETURNS
+  const { profile, loading } = useAuth();
+  const [loadingTimeout, setLoadingTimeout] = useState(false);
   const { slots: realSlots, loading: timetableLoading, error: timetableError, refreshTimetable } = useTimetableData();
-  const { rooms, loading: roomsLoading } = useRoomsData();
+  const { rooms, loading: roomsLoading } = useRoomsData();  
   const { courses, loading: coursesLoading } = useCoursesData();
   const { toast } = useToast();
+  
+  // Use profile or fallback to default
+  const currentProfile = profile || {
+    id: 'temp',
+    first_name: 'User',
+    last_name: '',
+    role: 'student' as const,
+    department: '',
+    email: '',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  };
+  
+  // Role-based access control - set tab based on user's role
+  const [tab, setTab] = useState<string>(currentProfile.role);
+  const [generatedSlots, setGeneratedSlots] = useState<Slot[]>([]);
+  const [generating, setGenerating] = useState(false);
+  
+  // Refs for printing
+  const adminPrintRef = useRef<HTMLDivElement | null>(null);
+  const studentPrintRef = useRef<HTMLDivElement | null>(null);
   
   const getRandomColor = () => {
     const colors = ["#6366f1", "#22c55e", "#f97316", "#06b6d4", "#a855f7", "#f472b6", "#84cc16"];
     return colors[Math.floor(Math.random() * colors.length)];
   };
-  
-  const [tab, setTab] = useState<string>(() => {
-    const h = typeof window !== "undefined" ? window.location.hash.replace("#", "") : "";
-    return h === "teacher" || h === "student" ? h : "admin";
-  });
-  const [generatedSlots, setGeneratedSlots] = useState<Slot[]>([]);
-  const [generating, setGenerating] = useState(false);
-  
-  // keep tab in sync with hash changes
-  if (typeof window !== "undefined") {
-    window.onhashchange = () => {
-      const h = window.location.hash.replace("#", "");
-      if (h) setTab(h);
-    };
-  }
   
   // Use generated slots if available, otherwise real data, otherwise fallback to mock data
   const slots = generatedSlots.length > 0 ? generatedSlots : 
@@ -56,7 +64,7 @@ export default function Index() {
                  { day: "Tue", period: 3, course: "PHY-110", room: "LT-1", faculty: "Dr. Bose", color: "#f97316" },
                  { day: "Wed", period: 4, course: "ELE-210", room: "ECE Lab", faculty: "Prof. Verma", color: "#a855f7", elective: true },
                ]);
-  
+
   // Calculate real utilization data from rooms and timetable
   const utilization = useMemo(() => {
     if (rooms && rooms.length > 0 && slots) {
@@ -75,9 +83,68 @@ export default function Index() {
     ];
   }, [rooms, slots]);
 
-  const adminPrintRef = useRef<HTMLDivElement | null>(null);
-  const studentPrintRef = useRef<HTMLDivElement | null>(null);
-
+  const mockRoomsForHeatmap = useMemo(() => {
+    if (roomsLoading) return [];
+    return Array.from({ length: 24 }, (_, i) => ({ 
+      name: `R-${i + 101}`, 
+      free: Math.random() > 0.4 
+    }));
+  }, [roomsLoading]);
+  
+  // Failsafe: If loading takes too long, show the dashboard anyway
+  React.useEffect(() => {
+    if (loading) {
+      const timeout = setTimeout(() => {
+        console.log('⚠️ Loading timeout reached, proceeding with default profile');
+        setLoadingTimeout(true);
+      }, 3000); // Reduced from 5s to 3s
+      return () => clearTimeout(timeout);
+    }
+  }, [loading]);
+  
+  // Update tab when profile loads or changes
+  React.useEffect(() => {
+    if (currentProfile?.role) {
+      setTab(currentProfile.role);
+      // Update URL hash to match user's role
+      if (typeof window !== "undefined") {
+        window.location.hash = currentProfile.role;
+      }
+    }
+  }, [currentProfile?.role]);
+  
+  // Prevent unauthorized tab switching
+  const handleTabChange = (newTab: string) => {
+    // Only allow users to access their own role's panel
+    if (newTab === currentProfile.role) {
+      setTab(newTab);
+      if (typeof window !== "undefined") {
+        window.location.hash = newTab;
+      }
+    } else {
+      // Show unauthorized access message
+      toast({
+        title: "Access Denied",
+        description: `You don't have permission to access the ${newTab} panel. You can only access the ${currentProfile.role} panel.`,
+        variant: "destructive"
+      });
+    }
+  };
+  
+  // Show loading state while profile is being fetched (with timeout)
+  if ((loading || !profile) && !loadingTimeout) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]" />
+          <p className="mt-2 text-muted-foreground">
+            {loading ? "Loading your profile..." : "Preparing your dashboard..."}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
   const generateAI = async () => {
     setGenerating(true);
     toast({
@@ -158,14 +225,6 @@ export default function Index() {
     }
   };
 
-  const mockRoomsForHeatmap = useMemo(() => {
-    if (roomsLoading) return [];
-    return Array.from({ length: 24 }, (_, i) => ({ 
-      name: `R-${i + 101}`, 
-      free: Math.random() > 0.4 
-    }));
-  }, [roomsLoading]);
-
   return (
     <div className="space-y-6">
       <header className="grid gap-4 md:grid-cols-3">
@@ -215,15 +274,35 @@ export default function Index() {
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={(v) => { setTab(v); if (typeof window !== "undefined") window.location.hash = v; }} className="w-full">
-        <TabsList>
-          <TabsTrigger value="admin" id="admin">Admin</TabsTrigger>
-          <TabsTrigger value="teacher" id="teacher">Teacher</TabsTrigger>
-          <TabsTrigger value="student" id="student">Student</TabsTrigger>
-        </TabsList>
+      <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
+        <div className="flex items-center justify-between mb-4">
+          <TabsList>
+            {/* Only show the user's role tab - no access to other roles */}
+            {currentProfile.role === "admin" && <TabsTrigger value="admin" id="admin">Admin Panel</TabsTrigger>}
+            {currentProfile.role === "teacher" && <TabsTrigger value="teacher" id="teacher">Teacher Panel</TabsTrigger>}
+            {currentProfile.role === "student" && <TabsTrigger value="student" id="student">Student Panel</TabsTrigger>}
+          </TabsList>
+          
+          {/* Show current user role */}
+          <div className="text-sm text-muted-foreground">
+            Logged in as: <span className="font-semibold capitalize text-primary">{currentProfile.role}</span>
+          </div>
+        </div>
 
         <TabsContent value="admin" className="space-y-4">
-          <UploadDataPanel />
+          {currentProfile.role !== "admin" ? (
+            <div className="text-center py-12">
+              <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Denied</h3>
+              <p className="text-gray-600">You don't have admin privileges to access this panel.</p>
+            </div>
+          ) : (
+            <>
+              <UploadDataPanel />
           <TimetableGenerator />
           <div className="grid gap-4 md:grid-cols-2">
             <RegisterTeacher />
@@ -248,10 +327,24 @@ export default function Index() {
             <InfraUtilReport />
             <CourseOnboardingWizard />
           </div>
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="teacher" className="space-y-4">
-          <Card>
+          {currentProfile.role !== "teacher" ? (
+            <div className="text-center py-12">
+              <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Denied</h3>
+              <p className="text-gray-600">You don't have teacher privileges to access this panel.</p>
+            </div>
+          ) : (
+            <>
+              <Card>
             <CardHeader><CardTitle>My Schedule</CardTitle></CardHeader>
             <CardContent>
               <TimetableGrid periods={8} data={slots} compact />
@@ -269,10 +362,24 @@ export default function Index() {
           </div>
           <FacultyDirectory />
           <OfficeHours />
+            </>
+          )}
         </TabsContent>
 
         <TabsContent value="student" className="space-y-4">
-          <Card>
+          {currentProfile.role !== "student" ? (
+            <div className="text-center py-12">
+              <div className="mx-auto w-24 h-24 bg-red-100 rounded-full flex items-center justify-center mb-4">
+                <svg className="w-12 h-12 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 15.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+              </div>
+              <h3 className="text-lg font-semibold text-gray-900 mb-2">Access Denied</h3>
+              <p className="text-gray-600">You don't have student privileges to access this panel.</p>
+            </div>
+          ) : (
+            <>
+              <Card>
             <CardHeader><CardTitle>My Timetable</CardTitle></CardHeader>
             <CardContent>
               <TimetableGrid periods={8} data={slots} compact printRef={studentPrintRef} />
@@ -291,6 +398,8 @@ export default function Index() {
             <CreditProgressDashboard />
             <StudyPlannerPanel />
           </div>
+            </>
+          )}
         </TabsContent>
       </Tabs>
     </div>

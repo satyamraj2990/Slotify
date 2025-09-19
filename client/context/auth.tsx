@@ -10,6 +10,7 @@ interface AuthContextProps {
   loading: boolean;
   login: (email: string, password: string) => Promise<{ ok: boolean; error?: string }>;
   logout: () => void;
+  forceLogout: () => void;
   signUp: (email: string, password: string, userData: { first_name: string; last_name: string; role: Role; department?: string }) => Promise<{ ok: boolean; error?: string }>;
 }
 
@@ -65,29 +66,84 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const fetchProfile = async (userId: string) => {
     try {
-      const { data, error } = await supabase
+      console.log('🔍 Fetching profile for user:', userId);
+      
+      // Check cache first (5 minute cache)
+      const cacheKey = `profile_${userId}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+        if (timestamp > fiveMinutesAgo) {
+          console.log('✅ Using cached profile');
+          setProfile(data);
+          setLoading(false);
+          return;
+        }
+      }
+      
+      // Add timeout to prevent hanging
+      const profilePromise = supabase
         .from('profiles')
-        .select('*')
+        .select('id, email, role, first_name, last_name, department, created_at, updated_at')
         .eq('id', userId)
         .single();
+      
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Profile fetch timeout')), 7000)
+      );
+      
+      const { data, error } = await Promise.race([profilePromise, timeoutPromise]) as any;
 
       if (error) {
-        console.error('Error fetching profile:', error);
-        // If profile doesn't exist (PGRST116), that's okay for new users
-        if (error.code === 'PGRST116') {
-          console.log('No profile found - user may need to complete registration');
+        console.error('❌ Error fetching profile:', error);
+        // If profile doesn't exist, create a default profile or handle gracefully
+        if (error.code === 'PGRST116') { // Row not found
+          console.log('📝 Profile not found, user can still use app with limited functionality');
+          setProfile({
+            id: userId,
+            first_name: 'User',
+            last_name: '',
+            role: 'student', // Default role
+            department: '',
+            email: '',
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          });
+        } else {
           setProfile(null);
         }
       } else {
+        console.log('✅ Profile fetched successfully:', data.role);
         setProfile(data);
+        
+        // Cache the profile for 5 minutes
+        const cacheKey = `profile_${userId}`;
+        localStorage.setItem(cacheKey, JSON.stringify({
+          data,
+          timestamp: Date.now()
+        }));
       }
-    } catch (error) {
-      console.error('Error fetching profile:', error);
-      setProfile(null);
+    } catch (error: any) {
+      console.error('💥 Exception fetching profile:', error);
+      // Set a default profile to prevent infinite loading
+      setProfile({
+        id: userId,
+        first_name: 'User',
+        last_name: '',
+        role: 'student',
+        department: '',
+        email: '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
     } finally {
+      console.log('✅ Profile fetch completed, setting loading to false');
       setLoading(false);
     }
   };
+
+
 
   const login: AuthContextProps["login"] = useCallback(async (email: string, password: string) => {
     try {
@@ -101,7 +157,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       });
       
       const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Login timeout')), 10000)
+        setTimeout(() => reject(new Error('Login timeout')), 8000)
       );
       
       const { data, error } = await Promise.race([loginPromise, timeoutPromise]) as any;
@@ -160,9 +216,52 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await supabase.auth.signOut();
+    console.log('🚪 Starting logout...');
+    
+    // Clear local state immediately to hide UI
     setUser(null);
     setProfile(null);
+    setLoading(false);
+    
+    // Clear all storage first
+    try {
+      localStorage.clear();
+      sessionStorage.clear();
+      console.log('✅ Storage cleared');
+    } catch (error) {
+      console.error('Storage clear error:', error);
+    }
+    
+    // Try to sign out from Supabase (but don't wait long)
+    try {
+      const signOutPromise = supabase.auth.signOut();
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Timeout')), 1500)
+      );
+      
+      await Promise.race([signOutPromise, timeoutPromise]);
+      console.log('✅ Supabase signOut completed');
+    } catch (error) {
+      console.log('⏰ Supabase signOut timeout/error - proceeding anyway');
+    }
+    
+    // Force redirect with page reload to ensure clean state
+    console.log('🔄 Redirecting to login...');
+    window.location.replace('/login');
+  }, []);
+
+  const forceLogout = useCallback(() => {
+    // Immediately clear React state
+    setUser(null);
+    setProfile(null);
+    setLoading(false);
+    
+    // Clear all storage
+    localStorage.clear();
+    sessionStorage.clear();
+    
+    // Force redirect
+    window.location.href = '/login';
   }, []);
 
   const value = useMemo(() => ({ 
@@ -171,8 +270,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loading, 
     login, 
     logout, 
+    forceLogout,
     signUp 
-  }), [user, profile, loading, login, logout, signUp]);
+  }), [user, profile, loading, login, logout, forceLogout, signUp]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
