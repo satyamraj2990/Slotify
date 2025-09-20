@@ -1,6 +1,6 @@
 import { RequestHandler } from "express";
-import { TimetableGenerationRequest, TimetableGenerationResponse, Course, Room, Profile } from "@shared/api";
-import { TimetableGenerator, GeneratorConstraints, TeacherAvailability, DayIndex } from "../lib/timetable-generator";
+import { TimetableGenerationRequest, TimetableGenerationResponse, Course, Room, Profile } from "../../shared/api";
+import { TimetableGenerator, GeneratorConstraints, TeacherAvailability, DayIndex, LunchZone } from "./timetable-generator";
 import { createClient } from '@supabase/supabase-js';
 import { randomUUID } from 'crypto';
 
@@ -106,27 +106,49 @@ export const handleTimetableGeneration: RequestHandler = async (req, res) => {
       } as TimetableGenerationResponse);
     }
 
-    // Set up default constraints
+    // Enhanced default constraints with lunch zones and period timings
     const defaultConstraints: GeneratorConstraints = {
       working_days: [1, 2, 3, 4, 5] as DayIndex[], // Monday to Friday
       periods_per_day: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6'],
-      period_duration_minutes: 60,
-      max_daily_periods_per_teacher: 6,
+      period_timings: {
+        'P1': { start: '09:00:00', end: '09:50:00' },
+        'P2': { start: '10:00:00', end: '10:50:00' },
+        'P3': { start: '11:00:00', end: '11:50:00' },
+        'P4': { start: '12:00:00', end: '12:50:00' }, // Lunch period
+        'P5': { start: '14:00:00', end: '14:50:00' }, // After lunch break
+        'P6': { start: '15:00:00', end: '15:50:00' }
+      },
+      period_duration_minutes: 50,
+      max_daily_periods_per_teacher: 5, // Reduced to account for lunch
+      max_weekly_periods_per_teacher: 22, // Realistic weekly limit
       min_gap_between_periods: 0,
-      lunch_break_period: 'P4'
+      lunch_zones: [
+        {
+          periods: ['P4'], // Standard lunch period
+          mandatory: true // No classes during this time
+        }
+      ]
     };
 
     // Merge with request constraints if provided
     const constraints: GeneratorConstraints = {
       ...defaultConstraints,
       ...requestData.constraints,
-      working_days: (requestData.constraints?.working_days as DayIndex[]) || defaultConstraints.working_days
+      working_days: (requestData.constraints?.working_days as DayIndex[]) || defaultConstraints.working_days,
+      lunch_zones: requestData.constraints?.lunch_zones || defaultConstraints.lunch_zones
     };
 
     console.log('Using constraints:', constraints);
 
+    // Enhanced teacher processing with availability parsing
+    const processedTeachers = teachers.map(teacher => ({
+      ...teacher,
+      availability_raw: teacher.availability,
+      available_slots: new Set<string>() // Will be populated by preprocessData
+    }));
+
     // Initialize the timetable generator
-    const generator = new TimetableGenerator(courses, teachers, rooms, constraints);
+    const generator = new TimetableGenerator(courses, processedTeachers, rooms, constraints);
 
     // Generate the timetable
     console.log('Starting generation process...');
@@ -134,28 +156,84 @@ export const handleTimetableGeneration: RequestHandler = async (req, res) => {
 
     console.log(`Generation completed: ${result.timetable.length} sessions assigned, ${result.unassigned.length} unassigned`);
 
-    // Convert the result to match our database schema
-    const timetableEntries = result.timetable.map(entry => ({
-      id: randomUUID(), // Generate unique ID
-      course_id: entry.course_id,
-      teacher_id: entry.teacher_id,
-      room_id: entry.room_id,
-      day_of_week: entry.day - 1, // Convert to 0-6 format (0 = Sunday)
-      start_time: getTimeForPeriod(entry.period), // You'll need to implement this
-      end_time: getEndTimeForPeriod(entry.period), // You'll need to implement this
-      semester: entry.semester,
-      year: entry.year,
-      is_active: true, // Set as active by default
-      created_by: null, // Will be set by RLS policy
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    }));
+    // Convert the result to match our database schema and handle consecutive lab sessions
+    const timetableEntries = [];
+    for (const entry of result.timetable) {
+      const dbEntry = {
+        id: randomUUID(),
+        course_id: entry.course_id,
+        teacher_id: entry.teacher_id,
+        room_id: entry.room_id,
+        day_of_week: entry.day - 1, // Convert to 0-6 format (0 = Sunday)
+        start_time: constraints.period_timings[entry.period]?.start || '09:00:00',
+        end_time: constraints.period_timings[entry.period]?.end || '09:50:00',
+        semester: entry.semester,
+        year: entry.year,
+        is_active: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      timetableEntries.push(dbEntry);
+
+      // For lab sessions, add consecutive period if needed
+      if (entry.session_type === 'P') {
+        const currentPeriodIndex = constraints.periods_per_day.indexOf(entry.period);
+        if (currentPeriodIndex < constraints.periods_per_day.length - 1) {
+          const nextPeriod = constraints.periods_per_day[currentPeriodIndex + 1];
+          const nextDbEntry = {
+            ...dbEntry,
+            id: randomUUID(),
+            start_time: constraints.period_timings[nextPeriod]?.start || '10:00:00',
+            end_time: constraints.period_timings[nextPeriod]?.end || '10:50:00'
+          };
+          timetableEntries.push(nextDbEntry);
+        }
+      }
+    }
+
+    // Clear existing timetables for this semester/year and save new ones
+    console.log('Clearing existing timetables and saving new ones...');
+    const { error: deleteError } = await supabase
+      .from('timetables')
+      .delete()
+      .eq('semester', requestData.semester)
+      .eq('year', requestData.year);
+
+    if (deleteError) {
+      console.warn('Warning: Could not clear existing timetables:', deleteError);
+    }
+
+    // Save new timetable to database
+    const { error: saveError } = await supabase
+      .from('timetables')
+      .insert(timetableEntries);
+    
+    if (saveError) {
+      console.error('Error saving timetable:', saveError);
+      // Continue anyway - don't fail the generation
+    } else {
+      console.log('Successfully saved timetable to database');
+    }
+
+    // Fetch the saved timetables with related data for the response
+    const { data: savedTimetables } = await supabase
+      .from('timetables')
+      .select(`
+        *,
+        course:courses(*),
+        teacher:profiles(*),
+        room:rooms(*)
+      `)
+      .eq('semester', requestData.semester)
+      .eq('year', requestData.year)
+      .eq('is_active', true);
 
     const response: TimetableGenerationResponse = {
       success: true,
-      message: `Successfully generated timetable with ${result.timetable.length} sessions`,
+      message: `Successfully generated timetable with ${result.timetable.length} sessions (${timetableEntries.length} total periods including labs)`,
       data: {
-        timetable: timetableEntries,
+        timetable: savedTimetables || timetableEntries,
         unassigned: result.unassigned,
         conflicts: result.conflicts,
         statistics: result.statistics
@@ -176,32 +254,6 @@ export const handleTimetableGeneration: RequestHandler = async (req, res) => {
     res.status(500).json(response);
   }
 };
-
-// Helper functions to convert periods to actual times
-// These should match your institution's period timings
-function getTimeForPeriod(period: string): string {
-  const timeMap: Record<string, string> = {
-    'P1': '09:00:00',
-    'P2': '10:00:00',
-    'P3': '11:00:00',
-    'P4': '12:00:00', // Lunch break
-    'P5': '14:00:00',
-    'P6': '15:00:00'
-  };
-  return timeMap[period] || '09:00:00';
-}
-
-function getEndTimeForPeriod(period: string): string {
-  const timeMap: Record<string, string> = {
-    'P1': '09:50:00',
-    'P2': '10:50:00',
-    'P3': '11:50:00',
-    'P4': '12:50:00', // Lunch break
-    'P5': '14:50:00',
-    'P6': '15:50:00'
-  };
-  return timeMap[period] || '09:50:00';
-}
 
 // Export CSV generation endpoint
 export const handleTimetableExport: RequestHandler = async (req, res) => {
@@ -261,9 +313,10 @@ export const handleTimetableExport: RequestHandler = async (req, res) => {
 };
 
 function generateCSVExport(timetableData: any[]): string {
-  const header = ['Day', 'Time', 'Course Code', 'Course Name', 'Teacher', 'Room', 'Type'];
+  const header = ['Day', 'Period', 'Time', 'Course Code', 'Course Name', 'Teacher', 'Room', 'Type'];
   const rows = timetableData.map(entry => [
     getDayName(entry.day_of_week),
+    getPeriodFromTime(entry.start_time),
     `${entry.start_time} - ${entry.end_time}`,
     entry.course?.code || '',
     entry.course?.name || '',
@@ -278,4 +331,16 @@ function generateCSVExport(timetableData: any[]): string {
 function getDayName(dayIndex: number): string {
   const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
   return days[dayIndex] || 'Unknown';
+}
+
+function getPeriodFromTime(startTime: string): string {
+  const timeMap: Record<string, string> = {
+    '09:00:00': 'P1',
+    '10:00:00': 'P2',
+    '11:00:00': 'P3',
+    '12:00:00': 'P4',
+    '14:00:00': 'P5',
+    '15:00:00': 'P6'
+  };
+  return timeMap[startTime] || 'Unknown';
 }

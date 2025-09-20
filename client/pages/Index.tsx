@@ -16,6 +16,7 @@ import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPan
 import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
 import { EmbeddingManagementPanel } from "@/components/admin/EmbeddingManagement";
+import { EnrollmentManagement } from "@/components/admin/EnrollmentManagement";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
 import SubjectSelection from "@/components/student/SubjectSelection";
 import { useToast } from "@/hooks/use-toast";
@@ -27,6 +28,7 @@ import LeaveStatusTracker from "@/components/teacher/LeaveStatusTracker";
 import { useTimetableData, useCoursesData, useRoomsData } from "@/hooks/use-supabase-data";
 import { useAuth } from "@/context/auth";
 import { motion as m } from "framer-motion";
+import { timetableGenerationApi } from "@/lib/api";
 
 export default function Index() {
   // ALL HOOKS MUST BE AT THE TOP - NEVER AFTER CONDITIONAL RETURNS
@@ -397,13 +399,38 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
                       </Button>
                       {generatedSlots.length > 0 && (
                         <>
-                          <Button variant="outline" onClick={() => {
-                            toast({
-                              title: "Save to Database",
-                              description: "Database integration coming soon - currently showing generated data",
-                            });
+                          <Button variant="outline" onClick={async () => {
+                            try {
+                              // Use the real timetable generation API to save to database
+                              const result = await timetableGenerationApi.generate({
+                                semester: '3rd',
+                                year: 2025,
+                                constraints: {
+                                  working_days: [1, 2, 3, 4, 5, 6], // Mon-Sat
+                                  periods_per_day: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'],
+                                  lunch_zones: [{ periods: ['P4'], mandatory: true }]
+                                }
+                              });
+                              
+                              if (result.success) {
+                                toast({
+                                  title: "Success!",
+                                  description: `Saved ${result.timetable?.length || 0} timetable entries to database`,
+                                });
+                                // Refresh the real data
+                                refreshTimetable();
+                              } else {
+                                throw new Error(result.message || 'Failed to save');
+                              }
+                            } catch (error) {
+                              toast({
+                                title: "Error",
+                                description: `Failed to save to database: ${error instanceof Error ? error.message : 'Unknown error'}`,
+                                variant: "destructive"
+                              });
+                            }
                           }} className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100">
-                            Save to Database ({generatedSlots.length} slots)
+                            Generate & Save to Database
                           </Button>
                           <Button variant="outline" onClick={() => {
                             setGeneratedSlots([]);
@@ -589,6 +616,7 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
               
               <UploadDataPanel />
               <TimetableGenerator />
+              <EnrollmentManagement />
               <EmbeddingManagementPanel />
               <div className="grid gap-4 md:grid-cols-2">
                 <RegisterTeacher />

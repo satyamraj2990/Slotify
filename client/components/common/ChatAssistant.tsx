@@ -17,6 +17,107 @@ interface ContextItem {
   preview: string;
 }
 
+interface PromptSuggestion {
+  id: string;
+  text: string;
+  prompt: string;
+  category: string;
+  icon: string;
+}
+
+const promptSuggestions: Record<string, PromptSuggestion[]> = {
+  student: [
+    {
+      id: "schedule",
+      text: "My today's schedule",
+      prompt: "What classes do I have today? Show me my complete schedule with room numbers and timings.",
+      category: "Schedule",
+      icon: "📅"
+    },
+    {
+      id: "room-find",
+      text: "Find available rooms",
+      prompt: "Which classrooms are available right now? I need to find a quiet place to study.",
+      category: "Rooms",
+      icon: "🏛️"
+    },
+    {
+      id: "faculty-contact",
+      text: "Find faculty contacts",
+      prompt: "How can I contact my Computer Science professors? Show me their office hours and email addresses.",
+      category: "Faculty",
+      icon: "👨‍🏫"
+    },
+    {
+      id: "next-class",
+      text: "What's my next class?",
+      prompt: "What is my next class and where should I go? Include the room number and any preparation I might need.",
+      category: "Schedule",
+      icon: "⏰"
+    }
+  ],
+  teacher: [
+    {
+      id: "my-classes",
+      text: "Today's teaching schedule",
+      prompt: "What classes am I teaching today? Show me the complete schedule with student counts and room assignments.",
+      category: "Schedule",
+      icon: "📚"
+    },
+    {
+      id: "room-booking",
+      text: "Book a classroom",
+      prompt: "I need to book a classroom for an extra tutorial session. Which rooms are available this week?",
+      category: "Rooms",
+      icon: "🏛️"
+    },
+    {
+      id: "student-info",
+      text: "Student information",
+      prompt: "Show me the student roster for my Data Structures class and their current attendance status.",
+      category: "Students",
+      icon: "👨‍🎓"
+    },
+    {
+      id: "substitute",
+      text: "Find substitute teacher",
+      prompt: "I need to find a substitute teacher for my Database Systems class tomorrow. Who is available?",
+      category: "Leave",
+      icon: "🔄"
+    }
+  ],
+  admin: [
+    {
+      id: "utilization",
+      text: "Resource utilization",
+      prompt: "Show me the current utilization of classrooms and labs. Which resources are underused?",
+      category: "Analytics",
+      icon: "📊"
+    },
+    {
+      id: "conflicts",
+      text: "Resolve timetable conflicts",
+      prompt: "Are there any scheduling conflicts in today's timetable? Help me identify and resolve them.",
+      category: "Timetable",
+      icon: "⚠️"
+    },
+    {
+      id: "faculty-load",
+      text: "Faculty workload analysis",
+      prompt: "Analyze the teaching workload distribution among faculty members. Who needs schedule adjustments?",
+      category: "Analytics",
+      icon: "⚖️"
+    },
+    {
+      id: "generate-schedule",
+      text: "Generate new timetable",
+      prompt: "Generate an optimized timetable for next semester considering all constraints and preferences.",
+      category: "Timetable",
+      icon: "✨"
+    }
+  ]
+};
+
 export default function ChatAssistant() {
   const { user, profile } = useAuth();
   const [open, setOpen] = useState(false);
@@ -59,17 +160,42 @@ export default function ChatAssistant() {
     setInput("");
     setLoading(true);
 
+    await handleApiCall(q);
+  };
+
+  const formatTime = (date: Date) => {
+    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const selectPrompt = (suggestion: PromptSuggestion) => {
+    setInput(suggestion.prompt);
+    // Auto-send the prompt
+    const userMessage: Message = { 
+      role: "user", 
+      text: suggestion.prompt, 
+      timestamp: new Date() 
+    };
+    
+    setMessages((m) => [...m, userMessage]);
+    setInput("");
+    setLoading(true);
+
+    // Use the same send logic
+    handleApiCall(suggestion.prompt);
+  };
+
+  const handleApiCall = async (prompt: string) => {
     try {
       let apiEndpoint = "/api/gemini/generate";
       let requestBody: any = { 
-        prompt: q 
+        prompt: prompt 
       };
 
       // Use enhanced chat with RAG if enabled
       if (useEnhancedMode) {
         apiEndpoint = "/api/chat/enhanced";
         requestBody = {
-          prompt: q,
+          prompt: prompt,
           useContext: true,
           maxContextItems: 3
         };
@@ -115,7 +241,7 @@ export default function ChatAssistant() {
       // Enhanced fallback with more helpful message
       const fallbackMessage: Message = {
         role: "ai",
-        text: `I'm experiencing some connectivity issues, but I can still help! ${localReply(q)} You can also try rephrasing your question.`,
+        text: `I'm experiencing some connectivity issues, but I can still help! ${localReply(prompt)} You can also try rephrasing your question.`,
         timestamp: new Date()
       };
       
@@ -125,14 +251,10 @@ export default function ChatAssistant() {
     }
   };
 
-  const formatTime = (date: Date) => {
-    return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-  };
-
   return (
     <div className="fixed bottom-5 right-5 z-50">
       {open && (
-        <div className="mb-3 w-[380px] overflow-hidden rounded-2xl border border-white/10 bg-background/80 backdrop-blur-xl shadow-[0_0_30px_rgba(255,20,147,0.35)]">
+        <div className="mb-3 w-[420px] overflow-hidden rounded-2xl border border-white/10 bg-background/80 backdrop-blur-xl shadow-[0_0_30px_rgba(255,20,147,0.35)]">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
             <div className="flex items-center gap-2">
@@ -223,6 +345,42 @@ export default function ChatAssistant() {
             
             <div ref={endRef} />
           </div>
+
+          {/* Prompt Suggestions */}
+          {messages.length <= 1 && (
+            <div className="border-t border-white/10 p-3 bg-gradient-to-b from-transparent to-pink-500/5">
+              <div className="text-xs font-medium text-muted-foreground mb-3 flex items-center gap-1">
+                <Sparkles className="h-3 w-3 text-pink-400" />
+                Popular questions for {profile?.role || 'students'}:
+              </div>
+              <div className="space-y-2 max-h-36 overflow-y-auto scrollbar-thin">
+                {promptSuggestions[profile?.role || 'student']?.map((suggestion) => (
+                  <button
+                    key={suggestion.id}
+                    onClick={() => selectPrompt(suggestion)}
+                    disabled={loading}
+                    className="w-full flex items-center gap-3 p-3 text-left text-xs bg-white/5 hover:bg-pink-500/10 border border-white/10 hover:border-pink-500/40 rounded-lg transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed group transform hover:scale-[1.02] hover:shadow-lg hover:shadow-pink-500/20"
+                  >
+                    <div className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-pink-500/20 to-accent/20 rounded-lg flex items-center justify-center group-hover:from-pink-500/30 group-hover:to-accent/30 transition-all">
+                      <span className="text-lg">{suggestion.icon}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-pink-100 group-hover:text-white truncate text-sm">
+                        {suggestion.text}
+                      </div>
+                      <div className="text-muted-foreground/80 text-xs mt-0.5 group-hover:text-muted-foreground">
+                        {suggestion.category}
+                      </div>
+                    </div>
+                    <div className="flex-shrink-0 w-1 h-6 bg-gradient-to-b from-pink-500 to-accent rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300" />
+                  </button>
+                ))}
+              </div>
+              <div className="text-xs text-muted-foreground/60 mt-3 text-center">
+                💡 Click any suggestion to send it instantly
+              </div>
+            </div>
+          )}
 
           {/* Input */}
           <div className="border-t border-white/10 p-3">

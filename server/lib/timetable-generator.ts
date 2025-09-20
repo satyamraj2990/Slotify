@@ -15,10 +15,18 @@ export type DayIndex = 1 | 2 | 3 | 4 | 5 | 6; // Mon..Sat (1-indexed as per your
 export interface GeneratorConstraints {
   working_days: DayIndex[];
   periods_per_day: string[]; // e.g., ['P1', 'P2', 'P3', 'P4', 'P5', 'P6']
+  period_timings: Record<string, { start: string; end: string }>; // Period time mappings
   period_duration_minutes: number;
   max_daily_periods_per_teacher: number;
+  max_weekly_periods_per_teacher: number; // New: Weekly limit
   min_gap_between_periods: number;
-  lunch_break_period?: string; // e.g., 'P4'
+  lunch_zones: LunchZone[]; // New: Multiple lunch periods support
+}
+
+export interface LunchZone {
+  periods: string[]; // e.g., ['P4', 'P5'] for extended lunch
+  departments?: string[]; // Optional: specific departments
+  mandatory: boolean; // If true, no classes can be scheduled during these periods
 }
 
 export interface TeacherAvailability extends Profile {
@@ -120,7 +128,7 @@ export class TimetableGenerator {
         sessions.push({
           course_id: course.id,
           session_type: sessionType,
-          duration_periods: 1,
+          duration_periods: sessionType === 'P' ? 2 : 1, // Lab sessions need 2 consecutive periods
           requires_lab: sessionType === 'P',
           group_size: sessionType === 'P' ? Math.ceil(course.max_students / 2) : course.max_students
         });
@@ -134,10 +142,12 @@ export class TimetableGenerator {
     const slots = new Set<string>();
     
     if (!teacher.availability_raw) {
-      // Default: available all working days, all periods
+      // Default: available all working days, all periods (except lunch)
       for (const day of this.constraints.working_days) {
         for (const period of this.periods) {
-          slots.add(`${day}|${period}`);
+          if (!this.isLunchPeriod(period, teacher.department)) {
+            slots.add(`${day}|${period}`);
+          }
         }
       }
       return slots;
@@ -156,13 +166,20 @@ export class TimetableGenerator {
         const dayIndex = dayMap[dayName] as DayIndex;
         
         if (dayIndex && this.constraints.working_days.includes(dayIndex)) {
-          // Map hours to periods (simplified - adjust based on your period timings)
-          const startPeriod = Math.max(1, Math.ceil((parseInt(startHour) - 8) / 1.5));
-          const endPeriod = Math.min(this.periods.length, Math.floor((parseInt(endHour) - 8) / 1.5));
-          
-          for (let p = startPeriod; p <= endPeriod; p++) {
-            if (this.periods[p - 1]) {
-              slots.add(`${dayIndex}|${this.periods[p - 1]}`);
+          // Use period timings from constraints for accurate mapping
+          for (const period of this.periods) {
+            const periodTiming = this.constraints.period_timings[period];
+            if (periodTiming) {
+              const periodStartHour = parseInt(periodTiming.start.split(':')[0]);
+              const periodEndHour = parseInt(periodTiming.end.split(':')[0]);
+              
+              // Check if period falls within teacher's available hours
+              if (periodStartHour >= parseInt(startHour) && periodEndHour <= parseInt(endHour)) {
+                // Skip lunch periods
+                if (!this.isLunchPeriod(period, teacher.department)) {
+                  slots.add(`${dayIndex}|${period}`);
+                }
+              }
             }
           }
         }
@@ -205,7 +222,7 @@ export class TimetableGenerator {
     
     if (!teacher) return null;
 
-    // Find suitable rooms
+    // Find suitable rooms  
     const suitableRooms = this.rooms.filter(room => {
       if (session.requires_lab && room.room_type !== 'lab') return false;
       if (room.capacity < (session.group_size || course.max_students)) return false;
@@ -214,39 +231,257 @@ export class TimetableGenerator {
 
     if (suitableRooms.length === 0) return null;
 
-    // Try each day and period combination
-    for (const day of this.constraints.working_days) {
-      for (const period of this.periods) {
-        // Skip lunch break
-        if (this.constraints.lunch_break_period === period) continue;
+    // For lab sessions requiring 2 consecutive periods
+    if (session.duration_periods === 2) {
+      return this.findConsecutiveSlots(session, course, teacher, suitableRooms, existing);
+    }
 
-        const slotKey = `${day}|${period}`;
-        
-        // Check teacher availability
-        if (!teacher.available_slots?.has(slotKey)) continue;
+    // Regular single-period sessions
+    return this.findSingleSlot(session, course, teacher, suitableRooms, existing);
+  }
 
-        // Try each suitable room
-        for (const room of suitableRooms) {
-          const candidate: TimetableEntry = {
-            course_id: session.course_id,
-            teacher_id: teacher.id,
-            room_id: room.id,
-            day,
-            period,
-            session_type: session.session_type,
-            semester: course.semester,
-            year: course.year,
-            is_active: true
-          };
+  private findSingleSlot(
+    session: CourseSession, 
+    course: Course, 
+    teacher: TeacherAvailability, 
+    suitableRooms: Room[], 
+    existing: TimetableEntry[]
+  ): TimetableEntry | null {
+    // Get all possible slots and sort by preference for balanced distribution
+    const possibleSlots = this.getBalancedSlotOrder(course, teacher, existing);
+    
+    for (const { day, period } of possibleSlots) {
+      // Skip lunch periods
+      if (this.isLunchPeriod(period, course?.department)) continue;
 
-          if (this.isValidAssignment(candidate, existing)) {
-            return candidate;
-          }
+      const slotKey = `${day}|${period}`;
+      
+      // Check teacher availability
+      if (!teacher.available_slots?.has(slotKey)) continue;
+
+      // Try each suitable room
+      for (const room of suitableRooms) {
+        const candidate: TimetableEntry = {
+          course_id: session.course_id,
+          teacher_id: teacher.id,
+          room_id: room.id,
+          day,
+          period,
+          session_type: session.session_type,
+          semester: course.semester,
+          year: course.year,
+          is_active: true
+        };
+
+        if (this.isValidAssignment(candidate, existing)) {
+          return candidate;
         }
       }
     }
 
     return null;
+  }
+
+  // New: Get slots ordered for balanced distribution
+  private getBalancedSlotOrder(
+    course: Course,
+    teacher: TeacherAvailability, 
+    existing: TimetableEntry[]
+  ): Array<{day: DayIndex, period: string}> {
+    const slots: Array<{day: DayIndex, period: string, score: number}> = [];
+    
+    // Generate all possible slots with balance scores
+    for (const day of this.constraints.working_days) {
+      for (const period of this.periods) {
+        if (this.isLunchPeriod(period, course?.department)) continue;
+        
+        const slotKey = `${day}|${period}`;
+        if (!teacher.available_slots?.has(slotKey)) continue;
+        
+        // Calculate balance score (lower is better for balanced distribution)
+        const score = this.calculateSlotBalanceScore(day, period, course, existing);
+        slots.push({ day, period, score });
+      }
+    }
+    
+    // Sort by score (best balanced slots first), then randomize within score groups
+    slots.sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      return Math.random() - 0.5; // Randomize equal scores
+    });
+    
+    return slots.map(({ day, period }) => ({ day, period }));
+  }
+
+  // Calculate how balanced a slot assignment would be
+  private calculateSlotBalanceScore(
+    day: DayIndex, 
+    period: string, 
+    course: Course, 
+    existing: TimetableEntry[]
+  ): number {
+    let score = 0;
+    
+    // Filter existing entries for same semester/year (same student group)
+    const groupEntries = existing.filter(e => 
+      e.semester === course.semester && e.year === course.year
+    );
+    
+    // Penalty for overloaded days (prefer spreading across days)
+    const dayLoad = groupEntries.filter(e => e.day === day).length;
+    score += dayLoad * 2; // Higher penalty for busy days
+    
+    // Penalty for overloaded time periods (prefer spreading across times)
+    const periodLoad = groupEntries.filter(e => e.period === period).length;
+    score += periodLoad * 3; // Higher penalty for busy periods
+    
+    // Bonus for middle periods (avoid too early/late classes)
+    const periodIndex = this.periods.indexOf(period);
+    const middleIndex = Math.floor(this.periods.length / 2);
+    const distanceFromMiddle = Math.abs(periodIndex - middleIndex);
+    score += distanceFromMiddle * 0.5; // Small penalty for extreme times
+    
+    // Penalty for clustering (avoid consecutive periods on same day)
+    const consecutivePenalty = this.calculateConsecutivePenalty(day, period, groupEntries);
+    score += consecutivePenalty;
+    
+    return score;
+  }
+
+  // Calculate penalty for creating too many consecutive classes
+  private calculateConsecutivePenalty(
+    day: DayIndex, 
+    period: string, 
+    groupEntries: TimetableEntry[]
+  ): number {
+    const periodIndex = this.periods.indexOf(period);
+    const dayEntries = groupEntries.filter(e => e.day === day);
+    
+    let consecutiveCount = 1; // This slot
+    
+    // Count consecutive slots before
+    for (let i = periodIndex - 1; i >= 0; i--) {
+      const prevPeriod = this.periods[i];
+      if (dayEntries.some(e => e.period === prevPeriod)) {
+        consecutiveCount++;
+      } else {
+        break;
+      }
+    }
+    
+    // Count consecutive slots after
+    for (let i = periodIndex + 1; i < this.periods.length; i++) {
+      const nextPeriod = this.periods[i];
+      if (dayEntries.some(e => e.period === nextPeriod)) {
+        consecutiveCount++;
+      } else {
+        break;
+      }
+    }
+    
+    // Penalty increases exponentially for long consecutive blocks
+    return consecutiveCount > 2 ? Math.pow(consecutiveCount - 2, 2) : 0;
+  }
+
+  private findConsecutiveSlots(
+    session: CourseSession, 
+    course: Course, 
+    teacher: TeacherAvailability, 
+    suitableRooms: Room[], 
+    existing: TimetableEntry[]
+  ): TimetableEntry | null {
+    // Get balanced consecutive slot pairs
+    const possibleSlotPairs = this.getBalancedConsecutiveSlots(course, teacher, existing);
+    
+    for (const { day, period1, period2 } of possibleSlotPairs) {
+      // Skip if either period is lunch
+      if (this.isLunchPeriod(period1, course?.department) || 
+          this.isLunchPeriod(period2, course?.department)) continue;
+
+      const slot1Key = `${day}|${period1}`;
+      const slot2Key = `${day}|${period2}`;
+      
+      // Check teacher availability for both periods
+      if (!teacher.available_slots?.has(slot1Key) || 
+          !teacher.available_slots?.has(slot2Key)) continue;
+
+      // Try each suitable room
+      for (const room of suitableRooms) {
+        const candidate1: TimetableEntry = {
+          course_id: session.course_id,
+          teacher_id: teacher.id,
+          room_id: room.id,
+          day,
+          period: period1,
+          session_type: session.session_type,
+          semester: course.semester,
+          year: course.year,
+          is_active: true
+        };
+
+        const candidate2: TimetableEntry = {
+          course_id: session.course_id,
+          teacher_id: teacher.id,
+          room_id: room.id,
+          day,
+          period: period2,
+          session_type: session.session_type,
+          semester: course.semester,
+          year: course.year,
+          is_active: true
+        };
+
+        // Check if both slots are valid
+        if (this.isValidAssignment(candidate1, existing) && 
+            this.isValidAssignment(candidate2, [...existing, candidate1])) {
+          // Return first slot - the caller should handle adding both
+          return candidate1;
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // Get consecutive slot pairs ordered for balanced distribution
+  private getBalancedConsecutiveSlots(
+    course: Course,
+    teacher: TeacherAvailability, 
+    existing: TimetableEntry[]
+  ): Array<{day: DayIndex, period1: string, period2: string}> {
+    const slotPairs: Array<{day: DayIndex, period1: string, period2: string, score: number}> = [];
+    
+    // Generate all possible consecutive slot pairs with balance scores
+    for (const day of this.constraints.working_days) {
+      for (let i = 0; i < this.periods.length - 1; i++) {
+        const period1 = this.periods[i];
+        const period2 = this.periods[i + 1];
+        
+        if (this.isLunchPeriod(period1, course?.department) || 
+            this.isLunchPeriod(period2, course?.department)) continue;
+            
+        const slot1Key = `${day}|${period1}`;
+        const slot2Key = `${day}|${period2}`;
+        
+        if (!teacher.available_slots?.has(slot1Key) || 
+            !teacher.available_slots?.has(slot2Key)) continue;
+        
+        // Calculate balance score for this slot pair
+        const score1 = this.calculateSlotBalanceScore(day, period1, course, existing);
+        const score2 = this.calculateSlotBalanceScore(day, period2, course, existing);
+        const totalScore = score1 + score2;
+        
+        slotPairs.push({ day, period1, period2, score: totalScore });
+      }
+    }
+    
+    // Sort by score (best balanced first), then randomize within score groups
+    slotPairs.sort((a, b) => {
+      if (a.score !== b.score) return a.score - b.score;
+      return Math.random() - 0.5;
+    });
+    
+    return slotPairs.map(({ day, period1, period2 }) => ({ day, period1, period2 }));
   }
 
   private isValidAssignment(candidate: TimetableEntry, existing: TimetableEntry[]): boolean {
@@ -263,6 +498,51 @@ export class TimetableGenerator {
         // Student group conflict (same semester/year)
         if (entry.semester === candidate.semester && entry.year === candidate.year) return false;
       }
+    }
+
+    // Check teacher workload limits
+    if (!this.checkTeacherWorkload(candidate.teacher_id, candidate.day, existing)) {
+      return false;
+    }
+
+    return true;
+  }
+
+  // New: Check if period is lunch time for given department
+  private isLunchPeriod(period: string, department?: string): boolean {
+    for (const lunchZone of this.constraints.lunch_zones) {
+      if (lunchZone.periods.includes(period)) {
+        // If lunch zone is department-specific, check department
+        if (lunchZone.departments && department) {
+          return lunchZone.departments.includes(department);
+        }
+        // If mandatory lunch zone, apply to all
+        if (lunchZone.mandatory) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+
+  // New: Enhanced teacher workload checking
+  private checkTeacherWorkload(teacherId: string, day: DayIndex, existing: TimetableEntry[]): boolean {
+    const teacher = this.teachers.find(t => t.id === teacherId);
+    if (!teacher) return false;
+
+    const teacherEntries = existing.filter(e => e.teacher_id === teacherId);
+    
+    // Check daily limit
+    const dailyCount = teacherEntries.filter(e => e.day === day).length;
+    if (dailyCount >= this.constraints.max_daily_periods_per_teacher) {
+      return false;
+    }
+
+    // Check weekly limit
+    const weeklyCount = teacherEntries.length;
+    const weeklyLimit = this.constraints.max_weekly_periods_per_teacher || teacher.weekly_workload || 20;
+    if (weeklyCount >= weeklyLimit) {
+      return false;
     }
 
     return true;
@@ -335,7 +615,7 @@ export class TimetableGenerator {
       teacherSchedules.set(entry.teacher_id, schedule);
     }
     
-    for (const [, schedule] of teacherSchedules) {
+    teacherSchedules.forEach((schedule) => {
       // Group by day
       const byDay = new Map<DayIndex, TimetableEntry[]>();
       for (const entry of schedule) {
@@ -345,8 +625,8 @@ export class TimetableGenerator {
       }
       
       // Calculate gaps for each day
-      for (const [, daySchedule] of byDay) {
-        if (daySchedule.length <= 1) continue;
+      byDay.forEach((daySchedule) => {
+        if (daySchedule.length <= 1) return;
         
         const periods = daySchedule.map(e => this.periods.indexOf(e.period)).sort((a, b) => a - b);
         const gaps = periods.slice(1).reduce((sum, period, i) => {
@@ -354,8 +634,8 @@ export class TimetableGenerator {
         }, 0);
         
         score -= gaps * 10; // Penalty for gaps
-      }
-    }
+      });
+    });
     
     return score;
   }
@@ -453,15 +733,15 @@ export class TimetableGenerator {
     const teacherUtilization: Record<string, number> = {};
     const roomUtilization: Record<string, number> = {};
     
-    for (const [teacherId, count] of teacherCounts) {
+    teacherCounts.forEach((count, teacherId) => {
       const teacher = this.teachers.find(t => t.id === teacherId);
       teacherUtilization[teacherId] = teacher ? (count / teacher.weekly_workload) * 100 : 0;
-    }
+    });
     
-    for (const [roomId, count] of roomCounts) {
+    roomCounts.forEach((count, roomId) => {
       const maxSlots = this.constraints.working_days.length * this.periods.length;
       roomUtilization[roomId] = (count / maxSlots) * 100;
-    }
+    });
     
     return {
       total_sessions: this.sessions.length,

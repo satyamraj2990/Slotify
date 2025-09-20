@@ -103,15 +103,23 @@ export interface TimetableGenerationRequest {
   constraints?: {
     working_days?: number[];
     periods_per_day?: string[];
+    period_timings?: Record<string, { start: string; end: string }>;
     period_duration_minutes?: number;
     max_daily_periods_per_teacher?: number;
+    max_weekly_periods_per_teacher?: number;
     min_gap_between_periods?: number;
-    lunch_break_period?: string;
+    lunch_zones?: LunchZone[];
   };
   options?: {
     optimize?: boolean;
     maxResolveAttempts?: number;
   };
+}
+
+export interface LunchZone {
+  periods: string[];
+  departments?: string[];
+  mandatory: boolean;
 }
 
 export interface TimetableGenerationResponse {
