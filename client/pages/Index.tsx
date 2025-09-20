@@ -16,6 +16,7 @@ import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPan
 import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
+import SubjectSelection from "@/components/student/SubjectSelection";
 import { useToast } from "@/hooks/use-toast";
 import { VacantRoomsHeatmap, NotificationsPanel } from "@/components/common/Extras";
 import FacultyDirectory from "@/components/teacher/FacultyDirectory";
@@ -681,6 +682,10 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
               </div>
             </CardContent>
           </Card>
+          
+          {/* Subject Selection - New Feature */}
+          <SubjectSelection />
+          
           <div className="grid gap-4 md:grid-cols-2">
             <VacantRoomsHeatmap rooms={mockRoomsForHeatmap} />
             <LibrarySeatGrid lanes={50} chairsPerLane={6} />

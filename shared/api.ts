@@ -59,6 +59,22 @@ export interface Room {
   updated_at: string
 }
 
+export interface StudentEnrollment {
+  id: string
+  student_id: string
+  course_id: string
+  semester: string
+  year: number
+  enrollment_type: 'core' | 'major' | 'minor' | 'elective' | 'value_add'
+  status: 'enrolled' | 'dropped' | 'completed'
+  enrolled_at: string
+  created_at: string
+  updated_at: string
+  // Joined data
+  course?: Course
+  student?: Profile
+}
+
 export interface Timetable {
   id: string
   course_id: string

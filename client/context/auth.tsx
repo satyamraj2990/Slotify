@@ -176,7 +176,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setTimeout(() => {
         console.log('⏰ Timeout: Setting loading to false');
         setLoading(false);
-      }, 1000);
+      }, 3000); // Increased timeout to 3 seconds
       
       return { ok: true };
     } catch (error: any) {

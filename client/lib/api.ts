@@ -959,3 +959,171 @@ export const emergencyReallocationApi = {
     return data || [];
   }
 };
+
+// Student Enrollments API
+export const studentEnrollmentsApi = {
+  // Get student's enrollments
+  async getByStudent(studentId: string, semester?: string, year?: number) {
+    let query = supabase
+      .from('student_enrollments')
+      .select(`
+        *,
+        course:courses(*),
+        student:profiles!student_enrollments_student_id_fkey(*)
+      `)
+      .eq('student_id', studentId);
+    
+    if (semester) query = query.eq('semester', semester);
+    if (year) query = query.eq('year', year);
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Get all enrollments (admin only)
+  async getAll(semester?: string, year?: number) {
+    let query = supabase
+      .from('student_enrollments')
+      .select(`
+        *,
+        course:courses(*),
+        student:profiles!student_enrollments_student_id_fkey(*)
+      `);
+    
+    if (semester) query = query.eq('semester', semester);
+    if (year) query = query.eq('year', year);
+    
+    const { data, error } = await query.order('created_at', { ascending: false });
+    
+    if (error) throw error;
+    return data || [];
+  },
+
+  // Enroll student in course
+  async enroll(enrollment: {
+    student_id: string;
+    course_id: string;
+    semester: string;
+    year: number;
+    enrollment_type?: 'core' | 'major' | 'minor' | 'elective' | 'value_add';
+  }) {
+    const { data, error } = await supabase
+      .from('student_enrollments')
+      .insert({
+        ...enrollment,
+        enrollment_type: enrollment.enrollment_type || 'elective'
+      })
+      .select(`
+        *,
+        course:courses(*),
+        student:profiles!student_enrollments_student_id_fkey(*)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Update enrollment
+  async update(id: string, updates: {
+    enrollment_type?: 'core' | 'major' | 'minor' | 'elective' | 'value_add';
+    status?: 'enrolled' | 'dropped' | 'completed';
+  }) {
+    const { data, error } = await supabase
+      .from('student_enrollments')
+      .update(updates)
+      .eq('id', id)
+      .select(`
+        *,
+        course:courses(*),
+        student:profiles!student_enrollments_student_id_fkey(*)
+      `)
+      .single();
+    
+    if (error) throw error;
+    return data;
+  },
+
+  // Drop/Delete enrollment
+  async drop(id: string) {
+    const { error } = await supabase
+      .from('student_enrollments')
+      .delete()
+      .eq('id', id);
+    
+    if (error) throw error;
+    return true;
+  },
+
+  // Get available courses for enrollment (courses not yet enrolled by student)  
+  async getAvailableCourses(studentId: string, semester: string, year: number) {
+    try {
+      // First get all courses for the semester/year
+      const { data: allCourses, error: coursesError } = await supabase
+        .from('courses')
+        .select('*')
+        .eq('semester', semester)
+        .eq('year', year)
+        .order('code');
+      
+      if (coursesError) throw coursesError;
+      
+      // Get student's current enrollments
+      const { data: enrollments, error: enrollmentsError } = await supabase
+        .from('student_enrollments')
+        .select('course_id')
+        .eq('student_id', studentId)
+        .eq('semester', semester)
+        .eq('year', year)
+        .eq('status', 'enrolled');
+      
+      if (enrollmentsError) throw enrollmentsError;
+      
+      // Filter out already enrolled courses
+      const enrolledCourseIds = new Set((enrollments || []).map(e => e.course_id));
+      const availableCourses = (allCourses || []).filter(course => !enrolledCourseIds.has(course.id));
+      
+      return availableCourses;
+    } catch (error) {
+      console.error('Error in getAvailableCourses:', error);
+      throw error;
+    }
+  },
+
+  // Get enrollment stats (admin view)
+  async getEnrollmentStats(semester: string, year: number) {
+    const { data, error } = await supabase
+      .from('student_enrollments')
+      .select(`
+        course_id,
+        course:courses(code, name, max_students),
+        enrollment_type
+      `)
+      .eq('semester', semester)
+      .eq('year', year)
+      .eq('status', 'enrolled');
+    
+    if (error) throw error;
+    
+    // Group by course and count enrollments
+    const stats = (data || []).reduce((acc: any[], enrollment: any) => {
+      const existing = acc.find(item => item.course_id === enrollment.course_id);
+      if (existing) {
+        existing.total_enrolled += 1;
+        existing.by_type[enrollment.enrollment_type] = (existing.by_type[enrollment.enrollment_type] || 0) + 1;
+      } else {
+        acc.push({
+          course_id: enrollment.course_id,
+          course: enrollment.course,
+          total_enrolled: 1,
+          by_type: { [enrollment.enrollment_type]: 1 }
+        });
+      }
+      return acc;
+    }, []);
+    
+    return stats;
+  }
+};
