@@ -15,6 +15,7 @@ import { CreditProgressDashboard, StudyPlannerPanel } from "@/components/student
 import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPanels";
 import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
+import { EmbeddingManagementPanel } from "@/components/admin/EmbeddingManagement";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
 import SubjectSelection from "@/components/student/SubjectSelection";
 import { useToast } from "@/hooks/use-toast";
@@ -588,6 +589,7 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
               
               <UploadDataPanel />
               <TimetableGenerator />
+              <EmbeddingManagementPanel />
               <div className="grid gap-4 md:grid-cols-2">
                 <RegisterTeacher />
                 <RegisterCourse />

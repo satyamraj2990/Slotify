@@ -15,26 +15,64 @@ import { useToast } from "@/hooks/use-toast";
 import { DisruptedClass, EmergencyReallocation } from "@/lib/supabase";
 
 export function EnergyOptimizationPanel() {
+  const { toast } = useToast();
+  const [shutDownRooms, setShutDownRooms] = useState<Set<string>>(new Set());
+
   const unused = [
     { room: "LT-3", reason: "No classes 2pm-5pm" },
     { room: "PHY-Lab", reason: "Maintenance day" },
     { room: "Seminar-2", reason: "Free all day" },
   ];
+
+  const handleShutUtilities = (roomName: string) => {
+    setShutDownRooms(prev => new Set([...prev, roomName]));
+    
+    toast({
+      title: "✅ Utilities Shutdown Initiated",
+      description: `Message sent to Lab Instructor to shut utilities for ${roomName}`,
+      duration: 4000,
+    });
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Energy Optimization</CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        {unused.map((u, i) => (
-          <m.div key={u.room} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className="flex items-center justify-between rounded-md border border-pink-500/30 bg-pink-500/10 p-3">
-            <div>
-              <div className="font-medium">{u.room}</div>
-              <div className="text-xs text-muted-foreground">{u.reason}</div>
-            </div>
-            <Button variant="outline" className="hover:shadow-[0_0_24px_rgba(255,20,147,0.6)]">Shut utilities</Button>
-          </m.div>
-        ))}
+        {unused.map((u, i) => {
+          const isShutDown = shutDownRooms.has(u.room);
+          return (
+            <m.div 
+              key={u.room} 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              transition={{ delay: i * 0.05 }} 
+              className={`flex items-center justify-between rounded-md border p-3 ${
+                isShutDown 
+                  ? "border-green-500/30 bg-green-500/10" 
+                  : "border-pink-500/30 bg-pink-500/10"
+              }`}
+            >
+              <div>
+                <div className="font-medium">{u.room}</div>
+                <div className="text-xs text-muted-foreground">{u.reason}</div>
+              </div>
+              <Button 
+                variant="outline" 
+                disabled={isShutDown}
+                onClick={() => handleShutUtilities(u.room)}
+                className={`transition-all duration-200 ${
+                  isShutDown 
+                    ? "bg-green-500/20 border-green-500/50 text-green-700 hover:bg-green-500/20" 
+                    : "hover:shadow-[0_0_24px_rgba(255,20,147,0.6)]"
+                }`}
+              >
+                {isShutDown ? "✓ Utilities Off" : "Shut utilities"}
+              </Button>
+            </m.div>
+          );
+        })}
       </CardContent>
     </Card>
   );

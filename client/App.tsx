@@ -11,25 +11,9 @@ import Index from "./pages/Index";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import NotFound from "./pages/NotFound";
-import {
-  SidebarProvider,
-  Sidebar,
-  SidebarHeader,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuItem,
-  SidebarMenuButton,
-  SidebarInset,
-  SidebarSeparator,
-  SidebarTrigger,
-} from "@/components/ui/sidebar";
 import { Button } from "@/components/ui/button";
-import { Moon, Sun, CalendarClock, LayoutGrid, Users2, BookOpenCheck } from "lucide-react";
+import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
-import { cn } from "@/lib/utils";
 import { AuthProvider, useAuth } from "@/context/auth";
 import Particles from "@/components/background/Particles";
 import ChatAssistant from "@/components/common/ChatAssistant";
@@ -51,65 +35,22 @@ function useDarkMode() {
   return { enabled, setEnabled };
 }
 
-function RoleBasedSidebar() {
-  const { profile } = useAuth();
-  
-  if (!profile) {
-    return (
-      <SidebarGroup>
-        <SidebarGroupLabel>Loading...</SidebarGroupLabel>
-      </SidebarGroup>
-    );
-  }
-  
-  // Get role-specific icon and text
-  const getRoleIcon = () => {
-    switch (profile.role) {
-      case "admin": return <CalendarClock />;
-      case "teacher": return <Users2 />;
-      case "student": 
-      default: return <BookOpenCheck />;
-    }
-  };
-  
-  const getRoleText = () => {
-    switch (profile.role) {
-      case "admin": return "Admin Panel";
-      case "teacher": return "Teacher Panel";
-      case "student":
-      default: return "Student Panel";
-    }
-  };
-  
-  const getRoleHash = () => {
-    return `#${profile.role}`;
-  };
-
-  return (
-    <SidebarGroup>
-      <SidebarGroupLabel>Dashboard</SidebarGroupLabel>
-      <SidebarMenu>
-        <SidebarMenuItem>
-          <SidebarMenuButton asChild>
-            <a href={getRoleHash()} className="flex items-center gap-2">
-              {getRoleIcon()} <span>{getRoleText()}</span>
-            </a>
-          </SidebarMenuButton>
-        </SidebarMenuItem>
-      </SidebarMenu>
-    </SidebarGroup>
-  );
-}
-
 const AppShell = ({ children }: { children: React.ReactNode }) => {
   const { enabled, setEnabled } = useDarkMode();
   const loc = useLocation();
   const showChat = loc.pathname.startsWith("/app");
   return (
-    <SidebarProvider>
-      <Sidebar collapsible="icon">
-        <SidebarHeader>
-          <div className="flex items-center gap-2 px-2 py-1.5">
+    <div className="min-h-screen bg-background">
+      <Particles />
+      <div className="absolute inset-0 -z-10 overflow-hidden">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute -top-24 -left-24 size-80 rounded-full bg-pink-500/15 blur-3xl animate-float" />
+          <div className="absolute top-1/3 -right-24 size-72 rounded-full bg-fuchsia-500/15 blur-3xl animate-float" style={{ animationDelay: "1s" }} />
+        </div>
+      </div>
+      <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
             <img
               src="/logo-slotify.svg"
               alt="Slotiफाई logo"
@@ -117,52 +58,29 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
             />
             <div className="font-extrabold tracking-tight">Slotiफाई</div>
           </div>
-        </SidebarHeader>
-        <SidebarContent>
-          <RoleBasedSidebar />
-        </SidebarContent>
-        <SidebarSeparator />
-        <SidebarFooter>
-          <div className="flex items-center justify-between px-2">
-            <span className="text-xs text-muted-foreground">Theme</span>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="rounded-full"
-              onClick={() => setEnabled(!enabled)}
-              aria-label="Toggle dark mode"
-            >
-              {enabled ? <Sun className="text-yellow-400" /> : <Moon />}
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href="#export">Export</a>
             </Button>
-          </div>
-        </SidebarFooter>
-      </Sidebar>
-      <SidebarInset>
-        <Particles />
-        <div className="absolute inset-0 -z-10 overflow-hidden"><div className="pointer-events-none absolute inset-0"><div className="absolute -top-24 -left-24 size-80 rounded-full bg-pink-500/15 blur-3xl animate-float" /><div className="absolute top-1/3 -right-24 size-72 rounded-full bg-fuchsia-500/15 blur-3xl animate-float" style={{ animationDelay: "1s" }} /></div></div>
-        <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className={cn("flex items-center gap-2 px-4 py-3")}>
-            <SidebarTrigger />
-            <div className="font-bold">Slotiफाई</div>
-            <div className="ml-auto flex items-center gap-2">
-              <select className="h-8 rounded-md bg-secondary px-2 text-xs">
-                <option>EN</option>
-                <option>HI</option>
-              </select>
-              <Button asChild variant="outline" size="sm">
-                <a href="#export">Export</a>
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Theme</span>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="rounded-full"
+                onClick={() => setEnabled(!enabled)}
+                aria-label="Toggle dark mode"
+              >
+                {enabled ? <Sun className="text-yellow-400" /> : <Moon />}
               </Button>
-              <Button asChild size="sm" className="bg-gradient-to-r from-primary to-accent">
-                <a href="#generate">Generate with AI</a>
-              </Button>
-              <TopbarUser />
             </div>
+            <TopbarUser />
           </div>
         </div>
-        <div className="container py-6">{children}</div>
-        {showChat && <ChatAssistant />}
-      </SidebarInset>
-    </SidebarProvider>
+      </div>
+      <div className="w-full py-6 px-6">{children}</div>
+      {showChat && <ChatAssistant />}
+    </div>
   );
 };
 

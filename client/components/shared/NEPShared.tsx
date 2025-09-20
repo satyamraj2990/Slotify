@@ -52,11 +52,32 @@ export function WhatIfSimulation() {
 
 export function NEPComplianceChecker() {
   const items = [
-    { k: "Credits Balanced", pass: true },
-    { k: "Multidisciplinary Slots", pass: true },
-    { k: "No Overload", pass: true },
-    { k: "Internship/Practice Integrated", pass: false },
+    { 
+      k: "Credits Balanced", 
+      pass: true,
+      link: "https://www.ugc.ac.in/nep/"
+    },
+    { 
+      k: "Multidisciplinary Slots", 
+      pass: true,
+      link: "https://www.education.gov.in/nep/multidisciplinary-education"
+    },
+    { 
+      k: "No Overload", 
+      pass: true,
+      link: "https://www.ugc.ac.in/nep/academic-guidelines"
+    },
+    { 
+      k: "Internship/Practice Integrated", 
+      pass: false,
+      link: "https://www.education.gov.in/nep/internship-guidelines"
+    },
   ];
+
+  const handleBadgeClick = (link: string) => {
+    window.open(link, '_blank', 'noopener,noreferrer');
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -67,7 +88,13 @@ export function NEPComplianceChecker() {
         {items.map((i) => (
           <div key={i.k} className={`flex items-center justify-between rounded-md border px-3 py-2 ${i.pass ? "border-green-500/30 bg-green-500/10" : "border-yellow-400/40 bg-yellow-400/10"}`}>
             <div className="text-sm">{i.k}</div>
-            <div className={`text-xs px-2 py-0.5 rounded ${i.pass ? "bg-green-500/20" : "bg-yellow-400/20"}`}>{i.pass ? "PASS" : "CHECK"}</div>
+            <button
+              onClick={() => handleBadgeClick(i.link)}
+              className={`text-xs px-2 py-0.5 rounded transition-all duration-200 hover:scale-105 hover:shadow-md cursor-pointer ${i.pass ? "bg-green-500/20 hover:bg-green-500/30" : "bg-yellow-400/20 hover:bg-yellow-400/30"}`}
+              title={`Click to learn more about ${i.k}`}
+            >
+              {i.pass ? "PASS" : "CHECK"}
+            </button>
           </div>
         ))}
       </CardContent>

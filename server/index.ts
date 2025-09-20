@@ -4,6 +4,13 @@ import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
 import { handleTimetableGeneration, handleTimetableExport } from "./routes/timetable-generation";
+import { 
+  handleEmbeddingGeneration, 
+  handleEmbeddingSearch, 
+  handleChatContext, 
+  handleEnhancedChat,
+  handleEmbeddingStats 
+} from "./routes/embedding-routes";
 
 export function createServer() {
   const app = express();
@@ -24,6 +31,13 @@ export function createServer() {
   // Timetable generation routes
   app.post("/api/timetable/generate", handleTimetableGeneration);
   app.get("/api/timetable/export", handleTimetableExport);
+
+  // Embedding and RAG routes
+  app.post("/api/embeddings/generate", handleEmbeddingGeneration);
+  app.post("/api/embeddings/search", handleEmbeddingSearch);
+  app.post("/api/embeddings/context", handleChatContext);
+  app.post("/api/chat/enhanced", handleEnhancedChat);
+  app.get("/api/embeddings/stats", handleEmbeddingStats);
 
   // Gemini proxy
   app.post("/api/gemini/generate", async (req, res) => {
