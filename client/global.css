@@ -12,45 +12,45 @@
    * A different format will require also updating the theme in tailwind.config.ts.
   */
   :root {
-    /* Light theme: white + soft pink accents */
-    --background: 0 0% 100%;
-    --foreground: 234 15% 15%;
+    /* Modern Light theme: warm grays + refined pink accents */
+    --background: 210 6% 98%; /* Soft off-white with warm undertone */
+    --foreground: 215 25% 15%; /* Rich dark blue-gray for text */
 
-    --card: 0 0% 100%;
-    --card-foreground: 234 15% 15%;
+    --card: 0 0% 100%; /* Pure white for cards to pop against background */
+    --card-foreground: 215 25% 15%;
 
     --popover: 0 0% 100%;
-    --popover-foreground: 234 15% 15%;
+    --popover-foreground: 215 25% 15%;
 
-    --primary: 330 85% 60%; /* soft pink */
+    --primary: 330 85% 55%; /* Refined pink, slightly deeper */
     --primary-foreground: 0 0% 100%;
 
-    --secondary: 0 0% 96%;
-    --secondary-foreground: 234 15% 15%;
+    --secondary: 210 8% 94%; /* Warm gray for secondary elements */
+    --secondary-foreground: 215 20% 25%;
 
-    --muted: 0 0% 96%;
-    --muted-foreground: 234 10% 45%;
+    --muted: 210 8% 93%; /* Subtle gray background */
+    --muted-foreground: 215 15% 40%; /* Medium gray text */
 
-    --accent: 315 90% 72%;
-    --accent-foreground: 234 15% 15%;
+    --accent: 315 75% 65%; /* Softer accent color */
+    --accent-foreground: 215 25% 15%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 70% 55%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 0 0% 90%;
-    --input: 0 0% 90%;
-    --ring: 330 85% 60%;
+    --border: 210 12% 88%; /* Defined borders with warm undertone */
+    --input: 210 12% 95%; /* Light input background */
+    --ring: 330 85% 55%; /* Focus ring matches primary */
 
     --radius: 1rem;
 
     --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 234 15% 15%;
-    --sidebar-primary: 330 85% 60%;
+    --sidebar-foreground: 215 25% 15%;
+    --sidebar-primary: 330 85% 55%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 234 15% 15%;
-    --sidebar-border: 0 0% 90%;
-    --sidebar-ring: 330 85% 60%;
+    --sidebar-accent: 210 8% 96%;
+    --sidebar-accent-foreground: 215 20% 25%;
+    --sidebar-border: 210 12% 88%;
+    --sidebar-ring: 330 85% 55%;
   }
 
   .dark {
@@ -95,11 +95,55 @@
 }
 
 @layer base {
-  * {
-    @apply border-border;
+  /* Removed global border rule that was making everything look robotic */
+  
+  body {
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    transition-property: color, background-color;
+    transition-duration: 300ms;
+    transition-timing-function: ease;
   }
 
-  body {
-    @apply bg-background text-foreground antialiased transition-colors duration-300;
+  /* Enhanced light theme styling for better visual appeal */
+  :root:not(.dark) {
+    /* Add subtle shadow and better card contrast in light mode */
+    --shadow-light: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+    --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+    --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  }
+
+  .dark {
+    --shadow-light: 0 1px 3px 0 rgb(0 0 0 / 0.3), 0 1px 2px -1px rgb(0 0 0 / 0.3);
+    --shadow-medium: 0 4px 6px -1px rgb(0 0 0 / 0.3), 0 2px 4px -2px rgb(0 0 0 / 0.3);
+    --shadow-large: 0 10px 15px -3px rgb(0 0 0 / 0.3), 0 4px 6px -4px rgb(0 0 0 / 0.3);
+  }
+
+  /* Better button and interactive element styling */
+  .light button[data-variant="default"]:not([data-variant="ghost"]):not([data-variant="link"]) {
+    box-shadow: var(--shadow-light);
+  }
+
+  .light .card,
+  .light [data-component="card"] {
+    box-shadow: var(--shadow-light);
+    border: 1px solid hsl(var(--border));
+  }
+
+  /* Improved form inputs in light mode */
+  .light input:not([type="checkbox"]):not([type="radio"]),
+  .light textarea,
+  .light select {
+    background-color: hsl(var(--input));
+    border: 1px solid hsl(var(--border));
+    box-shadow: inset 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  }
+
+  .light input:focus:not([type="checkbox"]):not([type="radio"]),
+  .light textarea:focus,
+  .light select:focus {
+    box-shadow: 0 0 0 2px hsl(var(--ring) / 0.2), inset 0 1px 2px 0 rgb(0 0 0 / 0.05);
   }
 }

@@ -1,5 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { UtilizationBar } from "@/components/analytics/Charts";
+import { LabRoomUtilization } from "@/components/analytics/Charts";
 
 export function CreditProgressDashboard() {
   const data = [
@@ -13,7 +13,7 @@ export function CreditProgressDashboard() {
         <CardTitle>Credit & Progress</CardTitle>
       </CardHeader>
       <CardContent>
-        <UtilizationBar data={data} />
+        <LabRoomUtilization />
       </CardContent>
     </Card>
   );

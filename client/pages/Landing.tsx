@@ -45,11 +45,11 @@ export default function Landing() {
       {/* Theme toggle */}
       <button
         onClick={toggleTheme}
-        className="absolute top-4 right-4 z-30 flex items-center gap-2 rounded-full border border-white/20 bg-white/10 px-3 py-2 shadow-md backdrop-blur-md transition hover:bg-pink-500/20 hover:border-pink-400/40 focus:outline-none focus:ring-2 focus:ring-pink-400/60"
+        className="absolute top-4 right-4 z-30 flex items-center gap-2 rounded-full border border-border/20 bg-background/70 px-3 py-2 shadow-md backdrop-blur-md transition hover:bg-accent/20 hover:border-primary/40 focus:outline-none focus:ring-2 focus:ring-primary/60 dark:border-white/20 dark:bg-white/10"
         aria-label="Toggle theme"
       >
-        {theme === "dark" ? <Sun className="w-5 h-5 text-yellow-300" /> : <Moon className="w-5 h-5 text-blue-500" />}
-        <span className="hidden md:inline text-xs font-semibold text-white/80">
+        {theme === "dark" ? <Sun className="w-5 h-5 text-yellow-300" /> : <Moon className="w-5 h-5 text-primary" />}
+        <span className="hidden md:inline text-xs font-semibold text-foreground dark:text-white/80">
           {theme === "dark" ? "Light" : "Dark"} Mode
         </span>
       </button>
@@ -58,21 +58,21 @@ export default function Landing() {
       <div className="absolute top-16 right-4 z-30 flex flex-col items-end">
         <button
           onClick={() => setShowHelp(v => !v)}
-          className="flex items-center justify-center rounded-full bg-white/10 border border-pink-400/30 px-3 py-2 shadow-md backdrop-blur transition hover:bg-pink-500/20 focus:outline-none"
+          className="flex items-center justify-center rounded-full bg-background/70 border border-primary/30 px-3 py-2 shadow-md backdrop-blur transition hover:bg-accent/20 focus:outline-none dark:bg-white/10 dark:border-pink-400/30 dark:hover:bg-pink-500/20"
           aria-label="Need Help"
         >
           <span className="text-2xl" role="img" aria-label="Need Help">🆘</span>
         </button>
         {showHelp && (
-          <div className="mt-2 w-64 bg-white/90 dark:bg-black/90 border border-pink-400/30 rounded-xl shadow-lg p-4 text-sm text-gray-900 dark:text-gray-100 backdrop-blur flex flex-col items-center animate-fade-in transition-all duration-300
-            hover:bg-green-900 hover:border-green-700 hover:shadow-[0_0_32px_0_rgba(34,197,94,0.25)]"
+          <div className="mt-2 w-64 bg-background/95 border border-primary/30 rounded-xl shadow-lg p-4 text-sm text-foreground backdrop-blur flex flex-col items-center animate-fade-in transition-all duration-300
+            hover:bg-green-50 hover:border-green-300 hover:shadow-[0_0_32px_0_rgba(34,197,94,0.25)] dark:bg-black/90 dark:text-gray-100 dark:hover:bg-green-900 dark:hover:border-green-700"
           >
             <div className="flex items-center gap-2 mb-2">
-              <HelpCircle className="text-pink-400" />
+              <HelpCircle className="text-primary" />
               <span className="font-semibold">Contact Support</span>
             </div>
             <span className="mb-1">Email:</span>
-            <a href="mailto:satyamraj2990@gmail.com" className="text-pink-500 font-bold hover:underline">
+            <a href="mailto:satyamraj2990@gmail.com" className="text-primary font-bold hover:underline">
               satyamraj2990@gmail.com
             </a>
             <div className="mt-3 text-center">
@@ -80,7 +80,7 @@ export default function Landing() {
             </div>
             <button
               onClick={() => setShowHelp(false)}
-              className="mt-3 px-3 py-1 rounded bg-pink-500/80 text-white text-xs hover:bg-pink-600 transition"
+              className="mt-3 px-3 py-1 rounded bg-primary text-primary-foreground text-xs hover:bg-primary/90 transition"
             >
               Close
             </button>

@@ -7,7 +7,14 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { TimetableGrid, Slot } from "@/components/timetable/TimetableGrid";
 import { exportTimetableCSV, exportTimetableICS, exportTimetablePDF } from "@/lib/exporters";
-import { UtilizationBar, LibraryDonut, CafeOccupancy } from "@/components/analytics/Charts";
+import { 
+  LabRoomUtilization, 
+  LibraryDonut, 
+  CafeOccupancy, 
+  FacultyExpertiseMapping, 
+  WorkloadBalancer, 
+  InfrastructureUtilization 
+} from "@/components/analytics/Charts";
 import { ClashDetectorBanner, WhatIfSimulation, NEPComplianceChecker } from "@/components/shared/NEPShared";
 import { ExpertiseMappingPanel, WorkloadBalancerPanel, InfraUtilReport, CourseOnboardingWizard } from "@/components/admin/NEPAdmin";
 import { RegisterTeacher, RegisterCourse, ConstraintsSetup } from "@/components/admin/Registry";
@@ -345,16 +352,6 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
 
   return (
     <div className="space-y-6">
-      {/* Welcome header for all users */}
-      <header className="text-center py-8">
-        <h1 className="text-4xl font-bold text-primary mb-2">Slotiफाई</h1>
-        <p className="text-muted-foreground">University Timetable Management System</p>
-        <p className="text-sm text-muted-foreground mt-2">
-          Welcome, <span className="font-semibold capitalize text-primary">{currentProfile.first_name} {currentProfile.last_name}</span>
-          {' '}({currentProfile.role})
-        </p>
-      </header>
-
       <Tabs value={tab} onValueChange={handleTabChange} className="w-full">
         <div className="flex items-center justify-between mb-4">
           <TabsList>
@@ -597,7 +594,7 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
               <ConstraintsSetup />
               <div className="grid gap-4 md:grid-cols-2">
                 <LeaveRequestsPanel />
-                <UtilizationBar data={utilization} />
+                <LabRoomUtilization />
               </div>
               <div className="grid gap-4 md:grid-cols-2">
                 <EnergyOptimizationPanel />
