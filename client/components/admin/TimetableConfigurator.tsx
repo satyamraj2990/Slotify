@@ -13,6 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { useValidatedForm, getFieldError, isFieldInvalid } from "@/lib/form-validation"
+import { timetableConfigSchema, type TimetableConfigFormData } from "@/lib/validation-schemas"
 import { 
   Calendar, 
   Clock, 
@@ -70,6 +72,33 @@ export function TimetableConfigurator({
   showAdvanced = true 
 }: TimetableConfiguratorProps) {
   const [activeTemplate, setActiveTemplate] = useState<string>("")
+  
+  // Form validation setup
+  const form = useValidatedForm(timetableConfigSchema, {
+    numberOfClasses: constraints.max_daily_periods_per_section || 2,
+    sectionsPerClass: 2,
+    minDailyPeriods: constraints.min_daily_periods_per_section || 1,
+    maxDailyPeriods: constraints.max_daily_periods_per_section || 7,
+    periodDuration: constraints.period_duration_minutes || 50,
+    workingDays: constraints.working_days || [1, 2, 3, 4, 5],
+    periodsPerDay: constraints.periods_per_day || ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'],
+  }, {
+    onSuccess: (data: TimetableConfigFormData) => {
+      // Update constraints with validated data
+      const updatedConstraints: TimetableConstraints = {
+        ...constraints,
+        min_daily_periods_per_section: data.minDailyPeriods,
+        max_daily_periods_per_section: data.maxDailyPeriods,
+        period_duration_minutes: data.periodDuration,
+        working_days: data.workingDays,
+        periods_per_day: data.periodsPerDay,
+      };
+      onConstraintsChange(updatedConstraints);
+    },
+    showErrorToast: true,
+    showSuccessToast: true,
+    successMessage: "Timetable configuration updated successfully",
+  });
   
   const dayOptions = [
     { value: 1, label: "Monday" },
@@ -251,7 +280,7 @@ export function TimetableConfigurator({
             <div className="space-y-4">
               <div className="flex items-center gap-2">
                 <Calendar className="h-4 w-4" />
-                <Label className="text-base font-semibold">Working Days</Label>
+                <Label className="text-base font-semibold">Working Days *</Label>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {dayOptions.map((day) => (
@@ -265,9 +294,12 @@ export function TimetableConfigurator({
                             working_days: [...constraints.working_days, day.value].sort()
                           })
                         } else {
-                          updateConstraints({
-                            working_days: constraints.working_days.filter(d => d !== day.value)
-                          })
+                          // Prevent unchecking if it would result in no working days
+                          if (constraints.working_days.length > 1) {
+                            updateConstraints({
+                              working_days: constraints.working_days.filter(d => d !== day.value)
+                            })
+                          }
                         }
                       }}
                     />
@@ -277,6 +309,16 @@ export function TimetableConfigurator({
                   </div>
                 ))}
               </div>
+              {constraints.working_days.length === 0 && (
+                <p className="text-red-500 text-xs">
+                  At least one working day must be selected
+                </p>
+              )}
+              {constraints.working_days.length > 6 && (
+                <p className="text-red-500 text-xs">
+                  Cannot select more than 6 working days
+                </p>
+              )}
             </div>
 
             {/* Period Configuration */}
@@ -316,30 +358,45 @@ export function TimetableConfigurator({
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="period-duration">Period Duration (minutes)</Label>
+                  <Label htmlFor="period-duration">Period Duration (minutes) *</Label>
                   <Select
                     value={constraints.period_duration_minutes.toString()}
                     onValueChange={(value) => {
                       const duration = parseInt(value)
-                      const timings = generatePeriodTimings(constraints.periods_per_day.length, duration)
-                      
-                      updateConstraints({
-                        period_duration_minutes: duration,
-                        period_timings: timings
-                      })
+                      if (duration >= 30 && duration <= 180) {
+                        const timings = generatePeriodTimings(constraints.periods_per_day.length, duration)
+                        
+                        updateConstraints({
+                          period_duration_minutes: duration,
+                          period_timings: timings
+                        })
+                      }
                     }}
                   >
-                    <SelectTrigger>
+                    <SelectTrigger
+                      className={
+                        !constraints.period_duration_minutes || constraints.period_duration_minutes < 30 || constraints.period_duration_minutes > 180
+                          ? "border-red-500"
+                          : ""
+                      }
+                    >
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
+                      <SelectItem value="30">30 minutes</SelectItem>
                       <SelectItem value="40">40 minutes</SelectItem>
                       <SelectItem value="45">45 minutes</SelectItem>
                       <SelectItem value="50">50 minutes</SelectItem>
                       <SelectItem value="60">60 minutes</SelectItem>
                       <SelectItem value="90">90 minutes</SelectItem>
+                      <SelectItem value="120">120 minutes</SelectItem>
                     </SelectContent>
                   </Select>
+                  {(!constraints.period_duration_minutes || constraints.period_duration_minutes < 30 || constraints.period_duration_minutes > 180) && (
+                    <p className="text-red-500 text-xs">
+                      Period duration must be between 30 and 180 minutes
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -365,30 +422,60 @@ export function TimetableConfigurator({
               <Label className="text-base font-semibold">Teacher Workload Limits</Label>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="max-daily-teacher">Max Periods per Day (per Teacher)</Label>
+                  <Label htmlFor="max-daily-teacher">Max Periods per Day (per Teacher) *</Label>
                   <Input
                     id="max-daily-teacher"
                     type="number"
                     min="1"
                     max="10"
                     value={constraints.max_daily_periods_per_teacher}
-                    onChange={(e) => updateConstraints({
-                      max_daily_periods_per_teacher: parseInt(e.target.value) || 6
-                    })}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 1 && value <= 10) {
+                        updateConstraints({
+                          max_daily_periods_per_teacher: value
+                        });
+                      }
+                    }}
+                    className={
+                      !constraints.max_daily_periods_per_teacher || constraints.max_daily_periods_per_teacher < 1 || constraints.max_daily_periods_per_teacher > 10
+                        ? "border-red-500"
+                        : ""
+                    }
                   />
+                  {(!constraints.max_daily_periods_per_teacher || constraints.max_daily_periods_per_teacher < 1 || constraints.max_daily_periods_per_teacher > 10) && (
+                    <p className="text-red-500 text-xs">
+                      Must be between 1 and 10 periods per day
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="max-weekly-teacher">Max Periods per Week (per Teacher)</Label>
+                  <Label htmlFor="max-weekly-teacher">Max Periods per Week (per Teacher) *</Label>
                   <Input
                     id="max-weekly-teacher"
                     type="number"
                     min="5"
                     max="50"
                     value={constraints.max_weekly_periods_per_teacher}
-                    onChange={(e) => updateConstraints({
-                      max_weekly_periods_per_teacher: parseInt(e.target.value) || 25
-                    })}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 5 && value <= 50) {
+                        updateConstraints({
+                          max_weekly_periods_per_teacher: value
+                        });
+                      }
+                    }}
+                    className={
+                      !constraints.max_weekly_periods_per_teacher || constraints.max_weekly_periods_per_teacher < 5 || constraints.max_weekly_periods_per_teacher > 50
+                        ? "border-red-500"
+                        : ""
+                    }
                   />
+                  {(!constraints.max_weekly_periods_per_teacher || constraints.max_weekly_periods_per_teacher < 5 || constraints.max_weekly_periods_per_teacher > 50) && (
+                    <p className="text-red-500 text-xs">
+                      Must be between 5 and 50 periods per week
+                    </p>
+                  )}
                 </div>
               </div>
             </div>
@@ -398,30 +485,60 @@ export function TimetableConfigurator({
               <Label className="text-base font-semibold">Class Schedule Limits</Label>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="min-daily-class">Min Periods per Day (per Class)</Label>
+                  <Label htmlFor="min-daily-class">Min Periods per Day (per Class) *</Label>
                   <Input
                     id="min-daily-class"
                     type="number"
                     min="1"
                     max="8"
                     value={constraints.min_daily_periods_per_section}
-                    onChange={(e) => updateConstraints({
-                      min_daily_periods_per_section: parseInt(e.target.value) || 4
-                    })}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 1 && value <= 8 && value <= constraints.max_daily_periods_per_section) {
+                        updateConstraints({
+                          min_daily_periods_per_section: value
+                        });
+                      }
+                    }}
+                    className={
+                      constraints.min_daily_periods_per_section > constraints.max_daily_periods_per_section
+                        ? "border-red-500"
+                        : ""
+                    }
                   />
+                  {constraints.min_daily_periods_per_section > constraints.max_daily_periods_per_section && (
+                    <p className="text-red-500 text-xs">
+                      Min periods cannot be greater than max periods ({constraints.max_daily_periods_per_section})
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="max-daily-class">Max Periods per Day (per Class)</Label>
+                  <Label htmlFor="max-daily-class">Max Periods per Day (per Class) *</Label>
                   <Input
                     id="max-daily-class"
                     type="number"
                     min="1"
                     max="10"
                     value={constraints.max_daily_periods_per_section}
-                    onChange={(e) => updateConstraints({
-                      max_daily_periods_per_section: parseInt(e.target.value) || 6
-                    })}
+                    onChange={(e) => {
+                      const value = parseInt(e.target.value);
+                      if (value >= 1 && value <= 10 && value >= constraints.min_daily_periods_per_section) {
+                        updateConstraints({
+                          max_daily_periods_per_section: value
+                        });
+                      }
+                    }}
+                    className={
+                      constraints.max_daily_periods_per_section < constraints.min_daily_periods_per_section
+                        ? "border-red-500"
+                        : ""
+                    }
                   />
+                  {constraints.max_daily_periods_per_section < constraints.min_daily_periods_per_section && (
+                    <p className="text-red-500 text-xs">
+                      Max periods cannot be less than min periods ({constraints.min_daily_periods_per_section})
+                    </p>
+                  )}
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="min-gap">Min Gap Between Periods (minutes)</Label>

@@ -1,6 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -26,7 +26,9 @@ import { VacantRoomsHeatmap, NotificationsPanel } from "@/components/common/Extr
 import FacultyDirectory from "@/components/teacher/FacultyDirectory";
 import OfficeHours from "@/components/teacher/OfficeHours";
 import LeaveApplicationForm from "@/components/teacher/LeaveApplicationForm";
+import SimpleLeaveForm from "@/components/teacher/SimpleLeaveForm";
 import LeaveStatusTracker from "@/components/teacher/LeaveStatusTracker";
+import { LeaveTestingGuide } from "@/components/common/TestingComponents";
 import { useTimetableData, useCoursesData, useRoomsData } from "@/hooks/use-supabase-data";
 import { useAuth } from "@/context/auth";
 import { motion as m } from "framer-motion";
@@ -1030,6 +1032,9 @@ Output JSON array of objects with keys: day (${workingDays.join('|')}), period (
                 <LeaveRequestsPanel />
                 <UtilizationBar data={utilization} />
               </div>
+              {/* <div className="grid gap-4 md:grid-cols-1">
+                <NotificationTester />
+              </div> */}
               <div className="grid gap-4 md:grid-cols-2">
                 <EnergyOptimizationPanel />
                 <EmergencyReallocationPanel />
@@ -1083,6 +1088,32 @@ Output JSON array of objects with keys: day (${workingDays.join('|')}), period (
                 />
                 <NotificationsPanel items={[{ id: "t1", title: "Leave approved for Tue 12:00", time: "1h" }, { id: "t2", title: "Room changed for CS101", time: "2h" }]} />
               </div>
+
+              {/* Testing & Debug Section */}
+              <div className="grid gap-4 md:grid-cols-2">
+                <LeaveTestingGuide />
+              </div>
+
+              {/* Alternative Leave Form */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>🧪 Alternative Leave Form</CardTitle>
+                  <CardDescription>
+                    If the original calendar doesn't work, use this simplified version with date input
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <SimpleLeaveForm 
+                    onSuccess={() => {
+                      setLeaveRefreshTrigger(prev => prev + 1);
+                      toast({
+                        title: "Leave Request Submitted",
+                        description: "Your leave request has been submitted for approval.",
+                      });
+                    }}
+                  />
+                </CardContent>
+              </Card>
               
               <div className="grid gap-4 md:grid-cols-2">
                 <FacultyDirectory />

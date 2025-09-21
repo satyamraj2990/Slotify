@@ -15,6 +15,14 @@ import {
   handleEnhancedChat,
   handleEmbeddingStats 
 } from "./routes/embedding-routes";
+import {
+  handleGetNotifications,
+  handleGetNotificationCount,
+  handleMarkNotificationRead,
+  handleMarkAllNotificationsRead,
+  handleCreateNotification,
+  handleUpdateNotificationPreferences
+} from "./routes/notification-routes";
 
 export function createServer() {
   const app = express();
@@ -43,6 +51,14 @@ export function createServer() {
   app.post("/api/embeddings/context", handleChatContext);
   app.post("/api/chat/enhanced", handleEnhancedChat);
   app.get("/api/embeddings/stats", handleEmbeddingStats);
+
+  // Notification routes
+  app.get("/api/notifications", handleGetNotifications);
+  app.get("/api/notifications/count", handleGetNotificationCount);
+  app.put("/api/notifications/:id/read", handleMarkNotificationRead);
+  app.put("/api/notifications/read-all", handleMarkAllNotificationsRead);
+  app.post("/api/notifications", handleCreateNotification);
+  app.put("/api/notifications/preferences", handleUpdateNotificationPreferences);
 
   // Gemini proxy
   app.post("/api/gemini/generate", async (req, res) => {

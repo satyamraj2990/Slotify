@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/context/auth";
+import { NotificationProvider } from "@/context/notifications";
 import Particles from "@/components/background/Particles";
 import ChatAssistant from "@/components/common/ChatAssistant";
+import { NotificationDropdown } from "@/components/common/NotificationSystem";
 
 const queryClient = new QueryClient();
 
@@ -62,6 +64,7 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
             <Button asChild variant="outline" size="sm">
               <a href="#export">Export</a>
             </Button>
+            <NotificationDropdown />
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Theme</span>
               <Button
@@ -137,17 +140,19 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <AppShell>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/app" element={<Protected><Index /></Protected>} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AppShell>
-        </BrowserRouter>
+        <NotificationProvider>
+          <BrowserRouter>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/app" element={<Protected><Index /></Protected>} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AppShell>
+          </BrowserRouter>
+        </NotificationProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

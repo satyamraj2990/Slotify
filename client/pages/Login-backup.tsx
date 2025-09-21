@@ -3,7 +3,6 @@ import { useNavigate } from "react-router-dom";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +18,7 @@ import { AdminIcon, TeacherIcon, StudentIcon } from "@/components/ui/RoleIcons";
 import { useValidatedForm, getFieldError, isFieldInvalid } from "@/lib/form-validation";
 import { loginSchema, signupSchema, forgotPasswordSchema } from "@/lib/validation-schemas";
 import type { LoginFormData, SignupFormData, ForgotPasswordFormData } from "@/lib/validation-schemas";
+import { Label } from "@/components/ui/label";
 
 type Role = "admin" | "teacher" | "student";
 
@@ -34,6 +34,7 @@ export default function Login() {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [role, setRole] = useState<Role>("student");
   const [showPassword, setShowPassword] = useState(false);
+  const [forgotPasswordEmail, setForgotPasswordEmail] = useState("");
 
   // Login form validation
   const loginForm = useValidatedForm(loginSchema, {}, {
@@ -69,6 +70,7 @@ export default function Login() {
       if (!res.ok) throw new Error(res.error || "Sign up failed");
       alert("Check your email for verification link!");
       setMode("login");
+      // Reset signup form
       signupForm.reset();
     },
     showErrorToast: true,
@@ -80,6 +82,7 @@ export default function Login() {
     onSuccess: async (data: ForgotPasswordFormData) => {
       // TODO: Implement forgot password API call
       console.log("Forgot password for:", data.email);
+      setForgotPasswordEmail("");
     },
     showErrorToast: true,
     showSuccessToast: true,
@@ -117,7 +120,6 @@ export default function Login() {
           style={{ opacity: 0.98 }}
         />
       </div>
-      
       {/* Animated video bottom right - using man.mp4 */}
       <div className="fixed bottom-16 right-4 -z-10 pointer-events-none group transition-all duration-300 flex items-end">
         <video
@@ -135,7 +137,6 @@ export default function Login() {
       <button className="absolute top-8 right-8 rounded-2xl shadow-lg hover:scale-105 hover:shadow-[0_0_32px_8px_rgba(0,255,128,0.35)] transition-all duration-200 flex items-center justify-center w-36 h-40">
         <img src="/nep.png" alt="NEP" className="w-32 h-36 object-contain rounded-2xl" style={{ objectPosition: 'center' }} />
       </button>
-
       <button className="absolute top-8 left-8 rounded-2xl shadow-lg hover:scale-105 hover:shadow-[0_0_32px_8px_rgba(0,255,128,0.35)] transition-all duration-200 flex items-center justify-center w-36 h-40">
         <img src="/chd.png" alt="CHD" className="w-32 h-36 object-contain rounded-2xl" style={{ objectPosition: 'center' }} />
       </button>
@@ -162,7 +163,7 @@ export default function Login() {
           </blockquote>
         </div>
 
-        {/* Role Selection */}
+        {/* Role Selection - evenly spaced, responsive */}
         <div className="flex flex-row justify-center items-center gap-8 w-full max-w-3xl mx-auto mb-8">
           {roles.map((r, i) => {
             const Icon = r.icon;
@@ -184,7 +185,7 @@ export default function Login() {
           })}
         </div>
 
-        {/* Login / Signup Form */}
+        {/* Login / Signup Form - centered, with padding and shadow */}
         <div className="w-full flex flex-col items-center h-full justify-center">
           <section className="rounded-3xl border-2 border-white/10 bg-white/10 backdrop-blur-2xl p-10 shadow-[0_0_64px_rgba(0,229,255,0.10)] flex flex-col gap-6 w-full max-w-xl mx-auto">
             <form className="space-y-4" onSubmit={currentForm.handleSubmit}>
@@ -194,6 +195,7 @@ export default function Login() {
                   type="button" 
                   onClick={() => {
                     setMode(mode === "login" ? "signup" : "login");
+                    // Reset forms when switching modes
                     loginForm.reset();
                     signupForm.reset();
                   }} 
@@ -212,9 +214,10 @@ export default function Login() {
                       {...signupForm.register("firstName")}
                       placeholder="John" 
                       className={`mt-1 ${isFieldInvalid(signupForm.errors, "firstName") ? "border-red-500" : ""}`}
+                      aria-invalid={isFieldInvalid(signupForm.errors, "firstName")}
                     />
                     {getFieldError(signupForm.errors, "firstName") && (
-                      <p className="text-red-400 text-xs mt-1">
+                      <p className="text-red-400 text-xs mt-1" id="firstName-error">
                         {getFieldError(signupForm.errors, "firstName")}
                       </p>
                     )}
@@ -226,9 +229,10 @@ export default function Login() {
                       {...signupForm.register("lastName")}
                       placeholder="Doe" 
                       className={`mt-1 ${isFieldInvalid(signupForm.errors, "lastName") ? "border-red-500" : ""}`}
+                      aria-invalid={isFieldInvalid(signupForm.errors, "lastName")}
                     />
                     {getFieldError(signupForm.errors, "lastName") && (
-                      <p className="text-red-400 text-xs mt-1">
+                      <p className="text-red-400 text-xs mt-1" id="lastName-error">
                         {getFieldError(signupForm.errors, "lastName")}
                       </p>
                     )}
@@ -241,9 +245,10 @@ export default function Login() {
                         {...signupForm.register("department")}
                         placeholder="Computer Science" 
                         className={`mt-1 ${isFieldInvalid(signupForm.errors, "department") ? "border-red-500" : ""}`}
+                        aria-invalid={isFieldInvalid(signupForm.errors, "department")}
                       />
                       {getFieldError(signupForm.errors, "department") && (
-                        <p className="text-red-400 text-xs mt-1">
+                        <p className="text-red-400 text-xs mt-1" id="department-error">
                           {getFieldError(signupForm.errors, "department")}
                         </p>
                       )}
@@ -257,12 +262,13 @@ export default function Login() {
                 <Input 
                   id="email"
                   type="email" 
-                  {...(mode === "login" ? loginForm.register("email") : signupForm.register("email"))}
+                  {...currentForm.register("email")}
                   placeholder="you@college.edu" 
                   className={`mt-1 ${isFieldInvalid(currentForm.errors, "email") ? "border-red-500" : ""}`}
+                  aria-invalid={isFieldInvalid(currentForm.errors, "email")}
                 />
                 {getFieldError(currentForm.errors, "email") && (
-                  <p className="text-red-400 text-xs mt-1">
+                  <p className="text-red-400 text-xs mt-1" id="email-error">
                     {getFieldError(currentForm.errors, "email")}
                   </p>
                 )}
@@ -274,9 +280,10 @@ export default function Login() {
                   <Input
                     id="password"
                     type={showPassword ? "text" : "password"}
-                    {...(mode === "login" ? loginForm.register("password") : signupForm.register("password"))}
+                    {...currentForm.register("password")}
                     placeholder="••••••••"
                     className={`mt-1 pr-12 ${isFieldInvalid(currentForm.errors, "password") ? "border-red-500" : ""}`}
+                    aria-invalid={isFieldInvalid(currentForm.errors, "password")}
                   />
                   <button
                     type="button"
@@ -288,7 +295,7 @@ export default function Login() {
                   </button>
                 </div>
                 {getFieldError(currentForm.errors, "password") && (
-                  <p className="text-red-400 text-xs mt-1">
+                  <p className="text-red-400 text-xs mt-1" id="password-error">
                     {getFieldError(currentForm.errors, "password")}
                   </p>
                 )}
@@ -330,6 +337,9 @@ export default function Login() {
                     </DialogContent>
                   </Dialog>
                 </div>
+              )}
+              </div>
+
               )}
 
               <m.button
@@ -401,6 +411,34 @@ export default function Login() {
                   </>
                 )}
               </m.button>
+              
+              {/* Add keyframes for gradient animation */}
+              <style>
+                {`
+                  @keyframes gradient-move {
+                    0% { background-position: 0% 50%; }
+                    50% { background-position: 100% 50%; }
+                    100% { background-position: 0% 50%; }
+                  }
+                `}
+              </style>
+            </form>
+          </section>
+        </div>
+      </div>
+    </div>
+  );
+}
+              {/* Add keyframes for gradient animation */}
+              <style>
+                {`
+                  @keyframes gradient-move {
+                    0% { background-position: 0% 50%; }
+                    50% { background-position: 100% 50%; }
+                    100% { background-position: 0% 50%; }
+                  }
+                `}
+              </style>
             </form>
           </section>
         </div>
