@@ -23,17 +23,33 @@ function timeToPeriod(time: string): number {
   return Math.floor((hours - startHour) + (minutes / 60)) + 1;
 }
 
+// Color generation function
+const getRandomColor = () => {
+  const colors = ["#6366f1", "#22c55e", "#f97316", "#06b6d4", "#a855f7", "#f472b6", "#84cc16"];
+  return colors[Math.floor(Math.random() * colors.length)];
+};
+
 // Convert database timetable to UI slots
 function convertTimetableToSlots(timetables: Timetable[]): Slot[] {
-  return timetables.map(tt => ({
-    day: DAYS[tt.day_of_week],
-    period: timeToPeriod(tt.start_time),
-    course: tt.course?.code || 'Unknown',
-    room: tt.room?.room_number || 'TBA',
-    faculty: tt.teacher ? `${tt.teacher.first_name} ${tt.teacher.last_name}` : 'TBA',
-    color: tt.course?.course_type === 'core' ? '#6366f1' : '#f472b6',
-    elective: tt.course?.course_type !== 'core'
-  }));
+  console.log('Converting timetables to slots:', timetables.length, 'entries');
+  
+  return timetables.map(tt => {
+    const slot = {
+      day: DAYS[tt.day_of_week] || 'Unknown',
+      period: timeToPeriod(tt.start_time),
+      course: tt.course?.code || `Course-${tt.course_id.slice(0, 8)}`,
+      room: tt.room?.room_number || `Room-${tt.room_id.slice(0, 8)}`,
+      faculty: tt.teacher?.display_name || 
+               (tt.teacher?.first_name && tt.teacher?.last_name 
+                 ? `${tt.teacher.first_name} ${tt.teacher.last_name}` 
+                 : `Teacher-${tt.teacher_id.slice(0, 8)}`),
+      color: getRandomColor(),
+      elective: tt.course?.course_type === 'value_add' || tt.course?.course_type === 'minor'
+    };
+    
+    console.log('Converted slot:', slot);
+    return slot;
+  });
 }
 
 export function useTimetableData() {
@@ -66,14 +82,9 @@ export function useTimetableData() {
         console.error('Error fetching timetable:', err);
         setError(err.message || 'Failed to load timetable');
         
-        // Fallback to mock data if Supabase isn't configured yet
-        const mockSlots: Slot[] = [
-          { day: "Mon", period: 1, course: "CSE-101", room: "LT-1", faculty: "Dr. Rao", color: "#f472b6", elective: true },
-          { day: "Mon", period: 2, course: "MAT-202", room: "LT-2", faculty: "Dr. Mehta", color: "#22c55e" },
-          { day: "Tue", period: 3, course: "PHY-110", room: "LT-1", faculty: "Dr. Bose", color: "#f97316" },
-          { day: "Wed", period: 4, course: "ELE-210", room: "ECE Lab", faculty: "Prof. Verma", color: "#a855f7", elective: true },
-        ];
-        setSlots(mockSlots);
+        // Show empty timetable instead of mock data to highlight the issue
+        console.warn('🚨 No real timetable data found. Please generate a timetable first!');
+        setSlots([]);
       } finally {
         setLoading(false);
       }

@@ -5,156 +5,156 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useState } from 'react';
 import { profilesApi, coursesApi, roomsApi } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
+import { useValidatedForm, getFieldError, isFieldInvalid } from '@/lib/form-validation';
+import { teacherRegistrationSchema, courseRegistrationSchema } from '@/lib/validation-schemas';
+import { Controller } from 'react-hook-form';
 
 export function RegisterTeacher() {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    fullName: '',
-    email: '',
-    phone: '',
-    subjects: '',
-    weeklyWorkload: '',
-    availability: '',
-    department: ''
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    control,
+    reset
+  } = useValidatedForm(teacherRegistrationSchema, {}, {
+    onSuccess: async (formData) => {
+      // Simulate API call delay
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      toast({
+        title: "Teacher registered successfully!",
+        description: `Added ${formData.fullName} to the system.`,
+      });
+      
+      reset(); // Clear form after successful submission
+    },
+    onError: (error) => {
+      toast({
+        title: "Registration failed",
+        description: "Please try again.",
+        variant: "destructive",
+      });
+    }
   });
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = async () => {
-    // Validate required fields
-    if (!formData.fullName || !formData.email) {
-      toast({
-        title: "Error",
-        description: "Full name and email are required",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
-      console.log('🎯 Starting teacher registration:', formData);
-
-      const [firstName, ...lastNameParts] = formData.fullName.split(' ');
-      const lastName = lastNameParts.join(' ');
-      
-      const subjectsArray = formData.subjects 
-        ? formData.subjects.split(',').map(s => s.trim()).filter(s => s)
-        : [];
-
-      const teacherData = {
-        email: formData.email,
-        role: 'teacher' as const,
-        first_name: firstName,
-        last_name: lastName || '',
-        display_name: formData.fullName,
-        department: formData.department || 'General',
-        phone: formData.phone || null,
-        subjects: subjectsArray.length > 0 ? subjectsArray : null,
-        weekly_workload: formData.weeklyWorkload ? parseInt(formData.weeklyWorkload) : null,
-        availability: formData.availability || null
-      };
-
-      console.log('👩‍🏫 Teacher data to create:', teacherData);
-      const result = await profilesApi.create(teacherData);
-      console.log('✅ Teacher created successfully:', result);
-
-      toast({
-        title: "Success",
-        description: `Teacher "${teacherData.display_name}" registered successfully`,
-      });
-
-      // Reset form
-      setFormData({
-        fullName: '',
-        email: '',
-        phone: '',
-        subjects: '',
-        weeklyWorkload: '',
-        availability: '',
-        department: ''
-      });
-
-    } catch (error: any) {
-      console.error('❌ Error registering teacher:', error);
-      
-      // Enhanced error handling
-      let errorMessage = "Failed to register teacher. Please try again.";
-      if (error?.message?.includes('duplicate key')) {
-        errorMessage = `Email "${formData.email}" already exists. Please use a different email.`;
-      } else if (error?.message?.includes('permission denied')) {
-        errorMessage = "Permission denied. Make sure you're logged in as an admin.";
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      toast({
-        title: "Error",
-        description: errorMessage,
-        variant: "destructive"
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Register Teacher</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-3">
-        <Input 
-          placeholder="Full name" 
-          value={formData.fullName}
-          onChange={(e) => handleInputChange('fullName', e.target.value)}
-        />
-        <Input 
-          placeholder="Email" 
-          type="email" 
-          value={formData.email}
-          onChange={(e) => handleInputChange('email', e.target.value)}
-        />
-        <Input 
-          placeholder="Phone" 
-          value={formData.phone}
-          onChange={(e) => handleInputChange('phone', e.target.value)}
-        />
-        <Input 
-          placeholder="Department" 
-          value={formData.department}
-          onChange={(e) => handleInputChange('department', e.target.value)}
-        />
-        <Input 
-          placeholder="Subjects (comma separated)" 
-          className="md:col-span-2" 
-          value={formData.subjects}
-          onChange={(e) => handleInputChange('subjects', e.target.value)}
-        />
-        <Input 
-          placeholder="Weekly workload (hours)" 
-          type="number"
-          value={formData.weeklyWorkload}
-          onChange={(e) => handleInputChange('weeklyWorkload', e.target.value)}
-        />
-        <Input 
-          placeholder="Availability (e.g., Mon 2-5)" 
-          className="md:col-span-2" 
-          value={formData.availability}
-          onChange={(e) => handleInputChange('availability', e.target.value)}
-        />
-        <div className="md:col-span-3 flex justify-end">
-          <Button 
-            className="bg-gradient-to-r from-primary to-accent"
-            onClick={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Adding Teacher...' : 'Add Teacher'}
-          </Button>
-        </div>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-1">
+            <Input 
+              placeholder="Full name *" 
+              {...register('fullName')}
+              className={isFieldInvalid(errors, 'fullName') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'fullName') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'fullName')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Email *" 
+              type="email" 
+              {...register('email')}
+              className={isFieldInvalid(errors, 'email') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'email') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'email')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Phone" 
+              {...register('phone')}
+              className={isFieldInvalid(errors, 'phone') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'phone') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'phone')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Controller
+              name="department"
+              control={control}
+              render={({ field }) => (
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <SelectTrigger className={isFieldInvalid(errors, 'department') ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Department *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Computer Science">Computer Science</SelectItem>
+                    <SelectItem value="Information Technology">Information Technology</SelectItem>
+                    <SelectItem value="Electronics">Electronics</SelectItem>
+                    <SelectItem value="Mechanical">Mechanical</SelectItem>
+                    <SelectItem value="Civil">Civil</SelectItem>
+                    <SelectItem value="Mathematics">Mathematics</SelectItem>
+                    <SelectItem value="Physics">Physics</SelectItem>
+                    <SelectItem value="Chemistry">Chemistry</SelectItem>
+                    <SelectItem value="English">English</SelectItem>
+                    <SelectItem value="Management">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {getFieldError(errors, 'department') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'department')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1 md:col-span-2">
+            <Input 
+              placeholder="Subjects (comma separated)" 
+              {...register('subjects')}
+              className={isFieldInvalid(errors, 'subjects') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'subjects') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'subjects')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Weekly workload (hours)" 
+              type="number"
+              min="1"
+              max="60"
+              {...register('weeklyWorkload', { valueAsNumber: true })}
+              className={isFieldInvalid(errors, 'weeklyWorkload') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'weeklyWorkload') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'weeklyWorkload')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1 md:col-span-2">
+            <Input 
+              placeholder="Availability (e.g., Mon 9-5, Wed 10-3)" 
+              {...register('availability')}
+              className={isFieldInvalid(errors, 'availability') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'availability') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'availability')}</p>
+            )}
+          </div>
+          
+          <div className="md:col-span-3 flex justify-end">
+            <Button 
+              type="submit"
+              className="bg-gradient-to-r from-primary to-accent"
+              disabled={false}
+            >
+              Add Teacher
+            </Button>
+          </div>
+        </form>
       </CardContent>
     </Card>
   );
@@ -162,37 +162,16 @@ export function RegisterTeacher() {
 
 export function RegisterCourse() {
   const { toast } = useToast();
-  const [isLoading, setIsLoading] = useState(false);
-  const [formData, setFormData] = useState({
-    courseName: '',
-    code: '',
-    credits: '',
-    theoryPractical: '',
-    weeklyLectures: '',
-    assignTeacher: '',
-    department: '',
-    semester: '',
-    year: '',
-    courseType: 'major'
-  });
-
-  const handleInputChange = (field: string, value: string) => {
-    setFormData(prev => ({ ...prev, [field]: value }));
-  };
-
-  const handleSubmit = async () => {
-    // Validate required fields
-    if (!formData.courseName || !formData.code || !formData.credits) {
-      toast({
-        title: "Error",
-        description: "Course name, code, and credits are required",
-        variant: "destructive"
-      });
-      return;
-    }
-
-    setIsLoading(true);
-    try {
+  const [teachers, setTeachers] = useState<any[]>([]);
+  
+  const {
+    register,
+    handleSubmit,
+    formState: { errors },
+    control,
+    reset
+  } = useValidatedForm(courseRegistrationSchema, {}, {
+    onSuccess: async (formData) => {
       console.log('🎯 Starting course registration:', formData);
 
       // Find teacher by name if provided
@@ -217,14 +196,14 @@ export function RegisterCourse() {
       const courseData = {
         name: formData.courseName,
         code: formData.code.toUpperCase(),
-        credits: parseInt(formData.credits),
+        credits: parseInt(formData.credits) || 3,
         department: formData.department || 'General',
         semester: formData.semester || 'Fall',
         year: parseInt(formData.year) || new Date().getFullYear(),
-        course_type: formData.courseType as 'major' | 'minor' | 'value_add' | 'core',
+        course_type: formData.courseType || 'major',
         max_students: 60, // Default value
         theory_practical: formData.theoryPractical || null,
-        weekly_lectures: formData.weeklyLectures ? parseInt(formData.weeklyLectures) : null,
+        weekly_lectures: parseInt(formData.weeklyLectures) || null,
         assigned_teacher_id: assignedTeacherId
       };
 
@@ -238,106 +217,188 @@ export function RegisterCourse() {
       });
 
       // Reset form
-      setFormData({
-        courseName: '',
-        code: '',
-        credits: '',
-        theoryPractical: '',
-        weeklyLectures: '',
-        assignTeacher: '',
-        department: '',
-        semester: '',
-        year: '',
-        courseType: 'major'
-      });
-
-    } catch (error: any) {
+      reset();
+    },
+    onError: (error) => {
       console.error('❌ Error registering course:', error);
       
       // Enhanced error handling
       let errorMessage = "Failed to register course. Please try again.";
       if (error?.message?.includes('duplicate key')) {
-        errorMessage = `Course code "${formData.code}" already exists. Please use a different code.`;
+        errorMessage = `Course code already exists. Please use a different code.`;
       } else if (error?.message?.includes('permission denied')) {
         errorMessage = "Permission denied. Make sure you're logged in as an admin.";
       } else if (error?.message) {
         errorMessage = error.message;
       }
-      
+
       toast({
         title: "Error",
         description: errorMessage,
         variant: "destructive"
       });
-    } finally {
-      setIsLoading(false);
     }
-  };
+  });
 
   return (
     <Card>
       <CardHeader>
         <CardTitle>Register Course</CardTitle>
       </CardHeader>
-      <CardContent className="grid gap-3 md:grid-cols-3">
-        <Input 
-          placeholder="Course name" 
-          className="md:col-span-2" 
-          value={formData.courseName}
-          onChange={(e) => handleInputChange('courseName', e.target.value)}
-        />
-        <Input 
-          placeholder="Code" 
-          value={formData.code}
-          onChange={(e) => handleInputChange('code', e.target.value)}
-        />
-        <Input 
-          placeholder="Credits" 
-          type="number" 
-          value={formData.credits}
-          onChange={(e) => handleInputChange('credits', e.target.value)}
-        />
-        <Input 
-          placeholder="Theory/Practical (e.g., 2L+2P)" 
-          value={formData.theoryPractical}
-          onChange={(e) => handleInputChange('theoryPractical', e.target.value)}
-        />
-        <Input 
-          placeholder="Weekly lectures" 
-          type="number" 
-          value={formData.weeklyLectures}
-          onChange={(e) => handleInputChange('weeklyLectures', e.target.value)}
-        />
-        <Input 
-          placeholder="Assign teacher (name)" 
-          value={formData.assignTeacher}
-          onChange={(e) => handleInputChange('assignTeacher', e.target.value)}
-        />
-        <Input 
-          placeholder="Department" 
-          value={formData.department}
-          onChange={(e) => handleInputChange('department', e.target.value)}
-        />
-        <Input 
-          placeholder="Semester" 
-          value={formData.semester}
-          onChange={(e) => handleInputChange('semester', e.target.value)}
-        />
-        <Input 
-          placeholder="Year" 
-          type="number" 
-          value={formData.year}
-          onChange={(e) => handleInputChange('year', e.target.value)}
-        />
-        <div className="md:col-span-3 flex justify-end">
-          <Button 
-            className="bg-gradient-to-r from-primary to-accent"
-            onClick={handleSubmit}
-            disabled={isLoading}
-          >
-            {isLoading ? 'Adding Course...' : 'Add Course'}
-          </Button>
-        </div>
+      <CardContent>
+        <form onSubmit={handleSubmit} className="grid gap-3 md:grid-cols-3">
+          <div className="space-y-1 md:col-span-2">
+            <Input 
+              placeholder="Course name *" 
+              {...register('courseName')}
+              className={isFieldInvalid(errors, 'courseName') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'courseName') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'courseName')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Code *" 
+              {...register('code')}
+              className={isFieldInvalid(errors, 'code') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'code') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'code')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Credits *" 
+              type="number"
+              min="1"
+              max="12"
+              {...register('credits', { valueAsNumber: true })}
+              className={isFieldInvalid(errors, 'credits') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'credits') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'credits')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Theory/Practical (e.g., 2L+2P)" 
+              {...register('theoryPractical')}
+              className={isFieldInvalid(errors, 'theoryPractical') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'theoryPractical') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'theoryPractical')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Weekly lectures" 
+              type="number"
+              min="1"
+              max="10"
+              {...register('weeklyLectures', { valueAsNumber: true })}
+              className={isFieldInvalid(errors, 'weeklyLectures') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'weeklyLectures') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'weeklyLectures')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Assign teacher (name)" 
+              {...register('assignTeacher')}
+              className={isFieldInvalid(errors, 'assignTeacher') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'assignTeacher') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'assignTeacher')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Controller
+              name="department"
+              control={control}
+              render={({ field }) => (
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <SelectTrigger className={isFieldInvalid(errors, 'department') ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Department *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Computer Science">Computer Science</SelectItem>
+                    <SelectItem value="Information Technology">Information Technology</SelectItem>
+                    <SelectItem value="Electronics">Electronics</SelectItem>
+                    <SelectItem value="Mechanical">Mechanical</SelectItem>
+                    <SelectItem value="Civil">Civil</SelectItem>
+                    <SelectItem value="Mathematics">Mathematics</SelectItem>
+                    <SelectItem value="Physics">Physics</SelectItem>
+                    <SelectItem value="Chemistry">Chemistry</SelectItem>
+                    <SelectItem value="English">English</SelectItem>
+                    <SelectItem value="Management">Management</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {getFieldError(errors, 'department') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'department')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Controller
+              name="semester"
+              control={control}
+              render={({ field }) => (
+                <Select onValueChange={field.onChange} value={field.value}>
+                  <SelectTrigger className={isFieldInvalid(errors, 'semester') ? "border-red-500" : ""}>
+                    <SelectValue placeholder="Semester *" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="1">Semester 1</SelectItem>
+                    <SelectItem value="2">Semester 2</SelectItem>
+                    <SelectItem value="3">Semester 3</SelectItem>
+                    <SelectItem value="4">Semester 4</SelectItem>
+                    <SelectItem value="5">Semester 5</SelectItem>
+                    <SelectItem value="6">Semester 6</SelectItem>
+                    <SelectItem value="7">Semester 7</SelectItem>
+                    <SelectItem value="8">Semester 8</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            />
+            {getFieldError(errors, 'semester') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'semester')}</p>
+            )}
+          </div>
+          
+          <div className="space-y-1">
+            <Input 
+              placeholder="Year *" 
+              type="number"
+              min="2020"
+              max="2030"
+              {...register('year', { valueAsNumber: true })}
+              className={isFieldInvalid(errors, 'year') ? "border-red-500" : ""}
+            />
+            {getFieldError(errors, 'year') && (
+              <p className="text-red-500 text-xs">{getFieldError(errors, 'year')}</p>
+            )}
+          </div>
+          
+          <div className="md:col-span-3 flex justify-end">
+            <Button 
+              type="submit"
+              className="bg-gradient-to-r from-primary to-accent"
+              disabled={false}
+            >
+              Add Course
+            </Button>
+          </div>
+        </form>
       </CardContent>
     </Card>
   );

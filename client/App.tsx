@@ -15,8 +15,10 @@ import { Button } from "@/components/ui/button";
 import { Moon, Sun } from "lucide-react";
 import { useEffect, useState } from "react";
 import { AuthProvider, useAuth } from "@/context/auth";
+import { NotificationProvider } from "@/context/notifications";
 import Particles from "@/components/background/Particles";
 import ChatAssistant from "@/components/common/ChatAssistant";
+import { NotificationDropdown } from "@/components/common/NotificationSystem";
 
 const queryClient = new QueryClient();
 
@@ -48,12 +50,30 @@ const AppShell = ({ children }: { children: React.ReactNode }) => {
           <div className="absolute top-1/3 -right-24 size-72 rounded-full bg-fuchsia-500/15 blur-3xl animate-float" style={{ animationDelay: "1s" }} />
         </div>
       </div>
+<<<<<<< HEAD
       
       {/* Right Side Navigation Bar - Show only on app pages */}
       {showChat && (
         <div className="absolute top-4 right-4 z-20">
           <div className="flex items-center gap-4 px-6 py-3 rounded-full border border-border/20 bg-background/95 backdrop-blur-md shadow-lg dark:border-white/10 dark:bg-background/80">
             <TopBarUser />
+=======
+      <div className="sticky top-0 z-20 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="flex items-center justify-between px-4 py-3">
+          <div className="flex items-center gap-2">
+            <img
+              src="/logo-slotify.svg"
+              alt="Slotiफाई logo"
+              className="h-8 w-8 rounded-md object-contain ring-1 ring-white/10 bg-white/5 p-0.5 shadow-[0_0_16px_rgba(236,72,153,0.35)]"
+            />
+            <div className="font-extrabold tracking-tight">Slotiफाई</div>
+          </div>
+          <div className="flex items-center gap-2">
+            <Button asChild variant="outline" size="sm">
+              <a href="#export">Export</a>
+            </Button>
+            <NotificationDropdown />
+>>>>>>> origin/master
             <div className="flex items-center gap-2">
               <span className="text-xs text-muted-foreground">Theme</span>
               <Button
@@ -129,17 +149,19 @@ const App = () => (
       <Toaster />
       <Sonner />
       <AuthProvider>
-        <BrowserRouter>
-          <AppShell>
-            <Routes>
-              <Route path="/" element={<Landing />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/app" element={<Protected><Index /></Protected>} />
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </AppShell>
-        </BrowserRouter>
+        <NotificationProvider>
+          <BrowserRouter>
+            <AppShell>
+              <Routes>
+                <Route path="/" element={<Landing />} />
+                <Route path="/login" element={<Login />} />
+                <Route path="/app" element={<Protected><Index /></Protected>} />
+                {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </AppShell>
+          </BrowserRouter>
+        </NotificationProvider>
       </AuthProvider>
     </TooltipProvider>
   </QueryClientProvider>

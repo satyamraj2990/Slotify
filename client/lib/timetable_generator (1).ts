@@ -1,16 +1,4 @@
-/*
-Slotiफाई - TimetableGenerator (TypeScript)
-- Place in: client/lib/timetable-generator.ts (or server/lib/timetable-generator.ts for server-side execution)
 
-This file implements a production-ready, purely TypeScript timetable generator using
-heuristics + local search. It is designed to integrate into your existing repo.
-
-NOTES:
-- This is a CPU-bound job; run on server side (API route / background worker), not in browser UI.
-- For very large datasets consider replacing the optimizer with OR-Tools (CP-SAT) or running LNS.
-*/
-
-// ------------------------- Types & Interfaces -------------------------
 export type DayIndex = 1 | 2 | 3 | 4 | 5 | 6; // Mon..Sat (match your project's convention)
 
 export interface CourseInput {

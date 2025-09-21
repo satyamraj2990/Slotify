@@ -1,5 +1,28 @@
 import { supabase, type Course, type Room, type Timetable, type Profile, type LeaveRequest, type LibrarySeat, type OfficeHour } from '@/lib/supabase';
 
+// Notification types
+export interface Notification {
+  id: string;
+  user_id: string;
+  title: string;
+  message: string;
+  type: 'leave_approved' | 'leave_rejected' | 'emergency_reallocation' | 'course_update' | 'timetable_change' | 'general';
+  is_read: boolean;
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  related_data?: any;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface NotificationPreferences {
+  leave_updates: boolean;
+  emergency_reallocations: boolean;
+  course_updates: boolean;
+  timetable_changes: boolean;
+  email_notifications: boolean;
+  push_notifications: boolean;
+}
+
 // Courses API
 export const coursesApi = {
   // Get all courses
@@ -1125,5 +1148,126 @@ export const studentEnrollmentsApi = {
     }, []);
     
     return stats;
+  }
+};
+
+// Notifications API
+export const notificationsApi = {
+  // Get notifications for a user
+  async getAll(userId: string, options?: { limit?: number; offset?: number; unreadOnly?: boolean }) {
+    const { limit = 20, offset = 0, unreadOnly = false } = options || {};
+    
+    const response = await fetch(
+      `/api/notifications?user_id=${userId}&limit=${limit}&offset=${offset}&unread_only=${unreadOnly}`
+    );
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch notifications');
+    }
+    
+    const result = await response.json();
+    return result.data as Notification[];
+  },
+
+  // Get unread notification count
+  async getUnreadCount(userId: string) {
+    const response = await fetch(`/api/notifications/count?user_id=${userId}`);
+    
+    if (!response.ok) {
+      throw new Error('Failed to fetch notification count');
+    }
+    
+    const result = await response.json();
+    return result.unread_count as number;
+  },
+
+  // Mark notification as read
+  async markAsRead(notificationId: string) {
+    const response = await fetch(`/api/notifications/${notificationId}/read`, {
+      method: 'PUT',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to mark notification as read');
+    }
+    
+    return await response.json();
+  },
+
+  // Mark all notifications as read
+  async markAllAsRead(userId: string) {
+    const response = await fetch(`/api/notifications/read-all?user_id=${userId}`, {
+      method: 'PUT',
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to mark all notifications as read');
+    }
+    
+    return await response.json();
+  },
+
+  // Create a notification (admin only)
+  async create(notificationData: {
+    user_id: string;
+    title: string;
+    message: string;
+    type: Notification['type'];
+    priority?: Notification['priority'];
+    related_data?: any;
+  }) {
+    const response = await fetch('/api/notifications', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(notificationData),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to create notification');
+    }
+    
+    return await response.json();
+  },
+
+  // Update notification preferences
+  async updatePreferences(userId: string, preferences: NotificationPreferences) {
+    const response = await fetch('/api/notifications/preferences', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ user_id: userId, preferences }),
+    });
+    
+    if (!response.ok) {
+      throw new Error('Failed to update notification preferences');
+    }
+    
+    return await response.json();
+  },
+
+  // Subscribe to real-time notifications using Supabase
+  subscribeToNotifications(userId: string, callback: (notification: Notification) => void) {
+    const channel = supabase
+      .channel(`notifications-${userId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'notifications',
+          filter: `user_id=eq.${userId}`,
+        },
+        (payload) => {
+          callback(payload.new as Notification);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }
 };
