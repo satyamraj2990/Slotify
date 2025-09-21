@@ -3,7 +3,11 @@ import "dotenv/config";
 import express from "express";
 import cors from "cors";
 import { handleDemo } from "./routes/demo";
-import { handleTimetableGeneration, handleTimetableExport } from "./lib/timetable-generation";
+import { 
+  handleTimetableGeneration, 
+  handleTimetableExport,
+  handleMultiClassTimetableGeneration 
+} from "./routes/timetable-generation";
 import { 
   handleEmbeddingGeneration, 
   handleEmbeddingSearch, 
@@ -30,6 +34,7 @@ export function createServer() {
 
   // Timetable generation routes
   app.post("/api/timetable/generate", handleTimetableGeneration);
+  app.post("/api/timetable/multi-class", handleMultiClassTimetableGeneration);
   app.get("/api/timetable/export", handleTimetableExport);
 
   // Embedding and RAG routes

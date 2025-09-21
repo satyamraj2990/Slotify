@@ -70,7 +70,7 @@ export default function Particles({ density = 0.00008, speed = 0.4, colors = ["#
   const init = async (_engine: any) => {
     // default engine already works; presets/plugins can be loaded here
   };
-  const loaded = (_container?: Container) => {
+  const loaded = async (_container?: Container): Promise<void> => {
     // reserved for future tweaks
   };
 

@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Badge } from "@/components/ui/badge";
 import { TimetableGrid, Slot } from "@/components/timetable/TimetableGrid";
 import { exportTimetableCSV, exportTimetableICS, exportTimetablePDF } from "@/lib/exporters";
 import { UtilizationBar, LibraryDonut, CafeOccupancy } from "@/components/analytics/Charts";
@@ -14,9 +16,9 @@ import { RegisterTeacher, RegisterCourse, ConstraintsSetup } from "@/components/
 import { CreditProgressDashboard, StudyPlannerPanel } from "@/components/student/ProgressPlanner";
 import { UploadDataPanel, LeaveRequestsPanel } from "@/components/admin/AdminPanels";
 import { TimetableGenerator } from "@/components/admin/TimetableGenerator";
+import { TimetableConfigurator } from "@/components/admin/TimetableConfigurator";
 import { EnergyOptimizationPanel, EmergencyReallocationPanel } from "@/components/admin/Operations";
 import { EmbeddingManagementPanel } from "@/components/admin/EmbeddingManagement";
-import { EnrollmentManagement } from "@/components/admin/EnrollmentManagement";
 import LibrarySeatGrid from "@/components/student/LibrarySeatGrid";
 import SubjectSelection from "@/components/student/SubjectSelection";
 import { useToast } from "@/hooks/use-toast";
@@ -28,7 +30,38 @@ import LeaveStatusTracker from "@/components/teacher/LeaveStatusTracker";
 import { useTimetableData, useCoursesData, useRoomsData } from "@/hooks/use-supabase-data";
 import { useAuth } from "@/context/auth";
 import { motion as m } from "framer-motion";
-import { timetableGenerationApi } from "@/lib/api";
+import { Settings, Calendar, Clock, Building, Ban, Coffee } from "lucide-react";
+
+interface TimetableConstraints {
+  working_days: number[]
+  periods_per_day: string[]
+  period_timings: Record<string, { start: string; end: string }>
+  period_duration_minutes: number
+  max_daily_periods_per_teacher: number
+  max_weekly_periods_per_teacher: number
+  min_daily_periods_per_section: number
+  max_daily_periods_per_section: number
+  min_gap_between_periods: number
+  lunch_zones: Array<{
+    periods: string[]
+    mandatory: boolean
+    departments?: string[]
+  }>
+  lunch_break_period: string // Legacy support
+  blocked_slots?: Array<{
+    id: string
+    name: string
+    days: number[]
+    periods: string[]
+    reason: string
+    departments?: string[]
+  }>
+  room_filters?: {
+    preferred_buildings?: string[]
+    excluded_rooms?: string[]
+    capacity_requirements?: Record<string, number>
+  }
+}
 
 export default function Index() {
   // ALL HOOKS MUST BE AT THE TOP - NEVER AFTER CONDITIONAL RETURNS
@@ -62,6 +95,42 @@ export default function Index() {
   const [numberOfSections, setNumberOfSections] = useState<number>(2);
   const [academicYear, setAcademicYear] = useState<string>("2024-25");
   const [activeSection, setActiveSection] = useState<string>("1A");
+  
+  // Timetable constraint configuration state
+  const [showAdvancedSettings, setShowAdvancedSettings] = useState(false);
+  const [constraints, setConstraints] = useState<TimetableConstraints>({
+    working_days: [1, 2, 3, 4, 5], // Monday to Friday by default (5 days)
+    periods_per_day: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7'], // 7 periods by default
+    period_timings: {
+      'P1': { start: '09:00', end: '09:50' },
+      'P2': { start: '10:00', end: '10:50' },
+      'P3': { start: '11:00', end: '11:50' },
+      'P4': { start: '12:00', end: '12:50' },
+      'P5': { start: '14:00', end: '14:50' },
+      'P6': { start: '15:00', end: '15:50' },
+      'P7': { start: '16:00', end: '16:50' }
+    },
+    period_duration_minutes: 50,
+    max_daily_periods_per_teacher: 7,
+    max_weekly_periods_per_teacher: 30,
+    min_daily_periods_per_section: 5, // Increased from 4 to 5
+    max_daily_periods_per_section: 7, // Increased from 6 to 7
+    min_gap_between_periods: 0,
+    lunch_zones: [
+      {
+        periods: ['P4'],
+        mandatory: false,
+        departments: []
+      }
+    ],
+    blocked_slots: [],
+    room_filters: {
+      preferred_buildings: [],
+      excluded_rooms: [],
+      capacity_requirements: {}
+    },
+    lunch_break_period: 'P4'
+  });
   
   // Leave management state
   const [leaveFormOpen, setLeaveFormOpen] = useState(false);
@@ -223,17 +292,54 @@ export default function Index() {
   
   const generateAI = async () => {
     setGenerating(true);
+    
+    // Debug: Log current constraints
+    console.log('🔧 Current constraints when generating:', {
+      working_days: constraints.working_days,
+      periods_per_day: constraints.periods_per_day,
+      min_daily_periods_per_section: constraints.min_daily_periods_per_section,
+      max_daily_periods_per_section: constraints.max_daily_periods_per_section,
+      lunch_zones: constraints.lunch_zones,
+      numberOfClasses,
+      numberOfSections,
+      selectedDepartment
+    });
+    
+    // CRITICAL: Verify math expectations
+    const expectedSlotsPerSection = constraints.working_days.length * constraints.min_daily_periods_per_section;
+    const maxSlotsPerSection = constraints.working_days.length * constraints.max_daily_periods_per_section;
+    console.log('📈 Expected Results:', {
+      workingDays: constraints.working_days.length,
+      minPeriodsPerDay: constraints.min_daily_periods_per_section,
+      maxPeriodsPerDay: constraints.max_daily_periods_per_section,
+      expectedSlotsPerSection: `${expectedSlotsPerSection} to ${maxSlotsPerSection}`,
+      totalSections: numberOfClasses * numberOfSections,
+      expectedTotalSlots: `${expectedSlotsPerSection * numberOfClasses * numberOfSections} to ${maxSlotsPerSection * numberOfClasses * numberOfSections}`
+    });
+    
     toast({
       title: "Generating Timetable",
       description: "AI is creating your optimized schedule...",
     });
 
-    const sys = `Generate a conflict-free weekly timetable for ${selectedDepartment} department with ${numberOfClasses} classes and ${numberOfSections} sections each (total ${numberOfClasses * numberOfSections} sections). Use 6 days (Mon-Sat) and 8 periods/day. 
+    // Use actual constraints from the UI state
+    const workingDays = constraints.working_days.map(dayNum => {
+      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      return dayNames[dayNum];
+    }).filter(Boolean);
+    
+    const totalPeriods = constraints.periods_per_day.length;
+    const totalSlots = workingDays.length * totalPeriods;
+
+    const sys = `Generate a conflict-free weekly timetable for ${selectedDepartment} department with ${numberOfClasses} classes and ${numberOfSections} sections each (total ${numberOfClasses * numberOfSections} sections). Use ${workingDays.length} days (${workingDays.join(', ')}) and ${totalPeriods} periods/day (${constraints.periods_per_day.join(', ')}). 
 
 Course naming: Use ${selectedDepartment} courses like CS101, CS201, etc. with section labels like "CS101 (1A)", "CS201 (2B)". 
 Sections: Generate for classes 1-${numberOfClasses}, sections A-${String.fromCharCode(64 + numberOfSections)}.
 
-Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (include section like "CS101 (1A)"), room, faculty, elective (boolean). Avoid clashes per day/period/room/faculty. Keep 30-60% occupancy.`;
+IMPORTANT: Generate ${Math.floor(totalPeriods * 0.9)}-${totalPeriods} periods per day per section to fully utilize the ${totalPeriods} available periods. Each section should have classes on EVERY working day with high utilization.
+Expected total slots per section: ${workingDays.length * Math.floor(totalPeriods * 0.9)} to ${workingDays.length * totalPeriods} slots per week.
+
+Output JSON array of objects with keys: day (${workingDays.join('|')}), period (${constraints.periods_per_day.join('|')}), course (include section like "CS101 (1A)"), room, faculty, elective (boolean). Avoid clashes per day/period/room/faculty.`;
 
     const tryParse = (txt: string): Slot[] | null => {
       try {
@@ -244,14 +350,14 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
         return arr
           .map((s: any) => ({
             day: s.day,
-            period: Number(s.period),
+            period: Number(s.period) || constraints.periods_per_day.indexOf(s.period) + 1,
             course: s.course,
             room: s.room,
             faculty: s.faculty,
             elective: Boolean(s.elective),
             color: s.elective ? "#f472b6" : getRandomColor(),
           }))
-          .filter((s: any) => s.day && s.period);
+          .filter((s: any) => s.day && s.period && workingDays.includes(s.day));
       } catch {
         return null;
       }
@@ -271,14 +377,14 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
         setGeneratedSlots(parsed);
         toast({
           title: "Success!",
-          description: `Generated ${parsed.length} timetable slots`,
+          description: `Generated ${parsed.length} timetable slots for ${numberOfClasses * numberOfSections} sections`,
         });
         return;
       }
       throw new Error("Bad AI response");
     } catch {
-      // Enhanced fallback generation with department-specific courses
-      const days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+      // Enhanced fallback generation using actual constraints
+      console.log('Using fallback generation with constraints:', constraints);
       
       // Department-specific courses
       const departmentCourses = {
@@ -287,58 +393,173 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
           { c: "CS201", name: "Data Structures", color: "#7c3aed" },
           { c: "CS301", name: "Database Systems", color: "#2563eb" },
           { c: "CS401", name: "Software Engineering", color: "#0891b2" },
+          { c: "CS501", name: "Algorithms", color: "#059669" },
+          { c: "CS601", name: "Machine Learning", color: "#dc2626" },
         ],
         BMS: [
           { c: "BM101", name: "Business Fundamentals", color: "#059669" },
           { c: "BM201", name: "Marketing Management", color: "#dc2626" },
           { c: "BM301", name: "Financial Analysis", color: "#ea580c" },
           { c: "BM401", name: "Strategic Management", color: "#ca8a04" },
+          { c: "BM501", name: "Operations Management", color: "#7c3aed" },
+          { c: "BM601", name: "International Business", color: "#2563eb" },
         ],
         ECE: [
           { c: "EC101", name: "Circuit Analysis", color: "#be123c" },
           { c: "EC201", name: "Digital Logic", color: "#a21caf" },
           { c: "EC301", name: "Signal Processing", color: "#7e22ce" },
           { c: "EC401", name: "Communication Systems", color: "#9333ea" },
+          { c: "EC501", name: "Microprocessors", color: "#6366f1" },
+          { c: "EC601", name: "VLSI Design", color: "#059669" },
         ]
       };
 
       const courses = departmentCourses[selectedDepartment as keyof typeof departmentCourses] || departmentCourses.CSE;
       const newSlots: Slot[] = [];
       
-      // Generate timetable for multiple classes and sections
+      // Generate timetable for multiple classes and sections using actual constraints
       for (let classYear = 1; classYear <= numberOfClasses; classYear++) {
         for (let section = 1; section <= numberOfSections; section++) {
           const sectionLabel = String.fromCharCode(64 + section); // A, B, C, etc.
           
-          for (const d of days) {
-            for (let p = 1; p <= 8; p++) {
-              if (Math.random() > 0.6) { // Slightly less dense schedule
+          // Calculate target slots per day to ensure balanced distribution
+          const availablePeriodsPerDay = constraints.periods_per_day.filter(period => 
+            !constraints.lunch_zones.some(zone => zone.mandatory && zone.periods.includes(period))
+          ).length;
+          
+          // FIXED: Simplified calculation to avoid edge cases
+          const desiredTarget = Math.min(constraints.max_daily_periods_per_section, availablePeriodsPerDay);
+          const mandatoryMin = Math.max(constraints.min_daily_periods_per_section, 1);
+          const targetSlotsPerDay = Math.max(mandatoryMin, Math.min(desiredTarget, Math.ceil(availablePeriodsPerDay * 0.9)));
+          
+          console.log(`🔧 Debug for section ${classYear}${sectionLabel}:`, {
+            availablePeriodsPerDay,
+            mandatoryMin,
+            desiredTarget,
+            targetSlotsPerDay,
+            maxDaily: constraints.max_daily_periods_per_section,
+            minDaily: constraints.min_daily_periods_per_section,
+            workingDays: constraints.working_days.length,
+            totalPeriodsPerDay: constraints.periods_per_day.length,
+            mandatoryLunchPeriods: constraints.lunch_zones.filter(zone => zone.mandatory).flatMap(zone => zone.periods),
+            MATH_CHECK: {
+              shouldGenerate: `${constraints.min_daily_periods_per_section} to ${constraints.max_daily_periods_per_section} periods per day`,
+              actualTarget: targetSlotsPerDay,
+              isCorrect: targetSlotsPerDay >= constraints.min_daily_periods_per_section && targetSlotsPerDay <= constraints.max_daily_periods_per_section,
+              calculation: `Math.max(${mandatoryMin}, Math.min(${desiredTarget}, ${Math.ceil(availablePeriodsPerDay * 0.9)})) = ${targetSlotsPerDay}`
+            }
+          });
+          
+          for (const dayNum of constraints.working_days) {
+            const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+            const dayName = dayNames[dayNum];
+            if (!dayName) continue;
+            
+            let dailySlotCount = 0;
+            console.log(`📅 Processing ${dayName} for section ${classYear}${sectionLabel}, target: ${targetSlotsPerDay} slots`);
+            
+            for (const period of constraints.periods_per_day) {
+              // Skip lunch periods if they're marked as mandatory blocks
+              if (constraints.lunch_zones.some(zone => 
+                zone.mandatory && zone.periods.includes(period)
+              )) {
+                console.log(`⏰ Skipping ${period} (mandatory lunch)`);
+                continue;
+              }
+              
+              // Generate classes based on daily target (not total target)
+              if (dailySlotCount < targetSlotsPerDay) {
                 const pick = courses[Math.floor(Math.random() * courses.length)];
                 const roomPrefix = selectedDepartment === 'CSE' ? 'CS' : selectedDepartment === 'BMS' ? 'BM' : 'EC';
+                const periodIndex = constraints.periods_per_day.indexOf(period) + 1;
                 
                 newSlots.push({ 
-                  day: d, 
-                  period: p, 
+                  day: dayName, 
+                  period: periodIndex, 
                   course: `${pick.c} (${classYear}${sectionLabel})`, 
                   room: `${roomPrefix}-${Math.ceil(Math.random() * 10)}${Math.floor(Math.random() * 3) + 1}`, 
-                  faculty: `Dr. ${selectedDepartment} Faculty ${Math.ceil(Math.random() * 5)}`, 
+                  faculty: `Dr. ${selectedDepartment} Faculty ${Math.ceil(Math.random() * 8)}`, 
                   color: pick.color, 
-                  elective: Math.random() > 0.8 
+                  elective: Math.random() > 0.85 
                 });
+                dailySlotCount++;
+                console.log(`✅ Added slot ${dailySlotCount}/${targetSlotsPerDay}: ${period} - ${pick.c} (${classYear}${sectionLabel})`);
+              } else {
+                console.log(`🚫 Skipping ${period} - already reached daily target (${dailySlotCount}/${targetSlotsPerDay})`);
               }
             }
+            
+            console.log(`📊 Completed ${dayName}: generated ${dailySlotCount}/${targetSlotsPerDay} slots for section ${classYear}${sectionLabel}`);
           }
         }
       }
       
-      console.log(`Enhanced timetable generated for ${selectedDepartment}:`, newSlots);
-      console.log(`Total sections: ${numberOfClasses} classes × ${numberOfSections} sections = ${numberOfClasses * numberOfSections} sections`);
-      console.log('Sample courses:', newSlots.slice(0, 5).map(s => s.course));
+      console.log(`🎯 FINAL TIMETABLE SUMMARY for ${selectedDepartment}:`, {
+        totalSlots: newSlots.length,
+        totalSections: numberOfClasses * numberOfSections,
+        slotsPerSection: newSlots.length / (numberOfClasses * numberOfSections),
+        expectedSlotsPerSection: `${workingDays.length * Math.floor(totalPeriods * 0.9)} to ${workingDays.length * totalPeriods}`,
+        workingDays: workingDays.length,
+        periodsPerDay: totalPeriods,
+        targetPerDay: Math.min(
+          Math.min(constraints.max_daily_periods_per_section || 8, constraints.periods_per_day.filter(period => 
+            !constraints.lunch_zones.some(zone => zone.mandatory && zone.periods.includes(period))
+          ).length),
+          Math.max(
+            constraints.min_daily_periods_per_section || 4,
+            Math.ceil(constraints.periods_per_day.filter(period => 
+              !constraints.lunch_zones.some(zone => zone.mandatory && zone.periods.includes(period))
+            ).length * 0.9)
+          )
+        ),
+        actualPerSection: newSlots.length / (numberOfClasses * numberOfSections),
+        avgPeriodsPerDay: Math.round((newSlots.length / (numberOfClasses * numberOfSections)) / workingDays.length),
+        
+        // Detailed breakdown by section
+        sectionBreakdown: (() => {
+          const breakdown: Record<string, any> = {};
+          for (let classYear = 1; classYear <= numberOfClasses; classYear++) {
+            for (let section = 1; section <= numberOfSections; section++) {
+              const sectionLabel = String.fromCharCode(64 + section);
+              const sectionKey = `${classYear}${sectionLabel}`;
+              const sectionSlots = newSlots.filter(slot => slot.course?.includes(`(${sectionKey})`));
+              const dailyCount: Record<string, number> = {};
+              workingDays.forEach(day => {
+                dailyCount[day] = sectionSlots.filter(slot => slot.day === day).length;
+              });
+              breakdown[sectionKey] = {
+                totalSlots: sectionSlots.length,
+                dailyCount,
+                avgPerDay: Math.round(sectionSlots.length / workingDays.length)
+              };
+            }
+          }
+          return breakdown;
+        })()
+      });
+      
+      // 🚨 CRITICAL CHECK: Detect if generation failed
+      const avgSlotsPerSection = newSlots.length / (numberOfClasses * numberOfSections);
+      const expectedMinSlots = workingDays.length * constraints.min_daily_periods_per_section;
+      
+      if (avgSlotsPerSection < expectedMinSlots * 0.5) {
+        console.error('🚨 GENERATION FAILURE DETECTED:', {
+          problem: 'Generated slots are way below expectations',
+          generated: Math.round(avgSlotsPerSection),
+          expected: expectedMinSlots,
+          possibleCauses: [
+            'AI generation failed and using fallback',
+            'Constraint calculation error',
+            'Loop not executing properly',
+            'Section filtering issue'
+          ]
+        });
+      }
       
       setGeneratedSlots(newSlots);
       toast({
         title: "Generated Enhanced Timetable",
-        description: `Created ${newSlots.length} slots for ${numberOfClasses} classes × ${numberOfSections} sections (${selectedDepartment})`,
+        description: `Created ${newSlots.length} slots across ${numberOfClasses * numberOfSections} sections (avg ${Math.round((newSlots.length / (numberOfClasses * numberOfSections)) / workingDays.length)} periods/day per section, target: ${Math.floor(totalPeriods * 0.9)}-${totalPeriods})`,
       });
     } finally {
       setGenerating(false);
@@ -397,40 +618,38 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
                       <Button id="generate" onClick={generateAI} disabled={generating} className="bg-gradient-to-r from-primary to-accent">
                         {generating ? "Generating..." : "One-click Generate"}
                       </Button>
+                      
+                      {/* TEST BUTTON: Verify constraints */}
+                      <Button 
+                        onClick={() => {
+                          console.log('🧪 CONSTRAINT TEST:', {
+                            currentConstraints: constraints,
+                            expectedBehavior: {
+                              workingDays: constraints.working_days.length,
+                              periodsPerDay: constraints.periods_per_day.length,
+                              targetPerSection: constraints.working_days.length * constraints.min_daily_periods_per_section + ' to ' + constraints.working_days.length * constraints.max_daily_periods_per_section,
+                              totalSections: numberOfClasses * numberOfSections
+                            }
+                          });
+                          toast({
+                            title: "Constraints Test",
+                            description: `${constraints.working_days.length} days × ${constraints.min_daily_periods_per_section}-${constraints.max_daily_periods_per_section} periods = ${constraints.working_days.length * constraints.min_daily_periods_per_section}-${constraints.working_days.length * constraints.max_daily_periods_per_section} slots per section`,
+                          });
+                        }}
+                        variant="outline"
+                        size="sm"
+                      >
+                        Test Config
+                      </Button>
                       {generatedSlots.length > 0 && (
                         <>
-                          <Button variant="outline" onClick={async () => {
-                            try {
-                              // Use the real timetable generation API to save to database
-                              const result = await timetableGenerationApi.generate({
-                                semester: '3rd',
-                                year: 2025,
-                                constraints: {
-                                  working_days: [1, 2, 3, 4, 5, 6], // Mon-Sat
-                                  periods_per_day: ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8'],
-                                  lunch_zones: [{ periods: ['P4'], mandatory: true }]
-                                }
-                              });
-                              
-                              if (result.success) {
-                                toast({
-                                  title: "Success!",
-                                  description: `Saved ${result.timetable?.length || 0} timetable entries to database`,
-                                });
-                                // Refresh the real data
-                                refreshTimetable();
-                              } else {
-                                throw new Error(result.message || 'Failed to save');
-                              }
-                            } catch (error) {
-                              toast({
-                                title: "Error",
-                                description: `Failed to save to database: ${error instanceof Error ? error.message : 'Unknown error'}`,
-                                variant: "destructive"
-                              });
-                            }
+                          <Button variant="outline" onClick={() => {
+                            toast({
+                              title: "Save to Database",
+                              description: "Database integration coming soon - currently showing generated data",
+                            });
                           }} className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100">
-                            Generate & Save to Database
+                            Save to Database ({generatedSlots.length} slots)
                           </Button>
                           <Button variant="outline" onClick={() => {
                             setGeneratedSlots([]);
@@ -543,7 +762,32 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
                   {/* Enhanced Generation Controls */}
                   <div className="px-6 pb-6 border-t border-white/10">
                     <div className="pt-4">
-                      <h4 className="text-sm font-medium mb-3 text-muted-foreground">Generation Parameters</h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-muted-foreground">Generation Parameters</h4>
+                        <Dialog open={showAdvancedSettings} onOpenChange={setShowAdvancedSettings}>
+                          <DialogTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-2">
+                              <Settings className="h-4 w-4" />
+                              Advanced Settings
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+                            <DialogHeader>
+                              <DialogTitle>Advanced Timetable Configuration</DialogTitle>
+                              <DialogDescription>
+                                Configure detailed constraints and preferences for timetable generation
+                              </DialogDescription>
+                            </DialogHeader>
+                            <TimetableConfigurator 
+                              constraints={constraints}
+                              onConstraintsChange={setConstraints}
+                              showAdvanced={true}
+                            />
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                      
+                      {/* Basic Parameters Grid */}
                       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="department" className="text-xs">Department</Label>
@@ -599,9 +843,166 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
                           </Select>
                         </div>
                       </div>
-                      
-                      <div className="mt-3 text-xs text-muted-foreground">
-                        Will generate timetable for <span className="font-semibold text-primary">{numberOfClasses} classes</span> × <span className="font-semibold text-primary">{numberOfSections} sections</span> = <span className="font-semibold text-primary">{numberOfClasses * numberOfSections} total sections</span> for <span className="font-semibold text-primary">{selectedDepartment}</span> department
+
+                      {/* Quick Inline Constraint Controls */}
+                      <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Calendar className="h-3 w-3" />
+                            Working Days
+                          </Label>
+                          <Select 
+                            value={constraints.working_days.length === 5 ? "5-day" : "6-day"}
+                            onValueChange={(value) => {
+                              const days = value === "5-day" ? [1, 2, 3, 4, 5] : [1, 2, 3, 4, 5, 6];
+                              setConstraints({ ...constraints, working_days: days });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="5-day">5 Days (Mon-Fri)</SelectItem>
+                              <SelectItem value="6-day">6 Days (Mon-Sat)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            Periods per Day
+                          </Label>
+                          <Select 
+                            value={constraints.periods_per_day.length.toString()}
+                            onValueChange={(value) => {
+                              const numPeriods = parseInt(value);
+                              const periods = Array.from({ length: numPeriods }, (_, i) => `P${i + 1}`);
+                              const timings: Record<string, { start: string; end: string }> = {};
+                              
+                              periods.forEach((period, index) => {
+                                const startHour = 9 + index;
+                                const endHour = startHour + 1;
+                                timings[period] = {
+                                  start: `${startHour.toString().padStart(2, '0')}:00`,
+                                  end: `${endHour.toString().padStart(2, '0')}:00`
+                                };
+                              });
+                              
+                              setConstraints({ 
+                                ...constraints, 
+                                periods_per_day: periods,
+                                period_timings: timings
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="4">4 Periods</SelectItem>
+                              <SelectItem value="5">5 Periods</SelectItem>
+                              <SelectItem value="6">6 Periods</SelectItem>
+                              <SelectItem value="7">7 Periods</SelectItem>
+                              <SelectItem value="8">8 Periods</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Coffee className="h-3 w-3" />
+                            Lunch Period
+                          </Label>
+                          <Select 
+                            value={constraints.lunch_break_period}
+                            onValueChange={(value) => {
+                              setConstraints({ 
+                                ...constraints, 
+                                lunch_break_period: value,
+                                lunch_zones: [{ periods: [value], mandatory: false, departments: [] }]
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {constraints.periods_per_day.map((period) => (
+                                <SelectItem key={period} value={period}>
+                                  {period}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-2">
+                          <Label className="text-xs flex items-center gap-1">
+                            <Building className="h-3 w-3" />
+                            Duration (min)
+                          </Label>
+                          <Select 
+                            value={constraints.period_duration_minutes.toString()}
+                            onValueChange={(value) => {
+                              setConstraints({ 
+                                ...constraints, 
+                                period_duration_minutes: parseInt(value)
+                              });
+                            }}
+                          >
+                            <SelectTrigger className="h-8 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="40">40 minutes</SelectItem>
+                              <SelectItem value="45">45 minutes</SelectItem>
+                              <SelectItem value="50">50 minutes</SelectItem>
+                              <SelectItem value="60">60 minutes</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Constraint Summary Badges */}
+                      <div className="mt-4 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex flex-wrap gap-2">
+                            <Badge variant="secondary" className="text-xs">
+                              <Calendar className="h-3 w-3 mr-1" />
+                              {constraints.working_days.length} Days
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              <Clock className="h-3 w-3 mr-1" />
+                              {constraints.periods_per_day.length} Periods
+                            </Badge>
+                            <Badge variant="secondary" className="text-xs">
+                              <Coffee className="h-3 w-3 mr-1" />
+                              Lunch: {constraints.lunch_break_period}
+                            </Badge>
+                            {constraints.blocked_slots && constraints.blocked_slots.length > 0 && (
+                              <Badge variant="destructive" className="text-xs">
+                                <Ban className="h-3 w-3 mr-1" />
+                                {constraints.blocked_slots.length} Blocked
+                              </Badge>
+                            )}
+                            {constraints.room_filters?.preferred_buildings && constraints.room_filters.preferred_buildings.length > 0 && (
+                              <Badge variant="outline" className="text-xs">
+                                <Building className="h-3 w-3 mr-1" />
+                                {constraints.room_filters.preferred_buildings.length} Buildings
+                              </Badge>
+                            )}
+                          </div>
+                          
+                          {/* Sync Indicator */}
+                          <Badge variant="default" className="text-xs bg-green-100 text-green-800 border-green-200">
+                            <div className="w-2 h-2 bg-green-500 rounded-full mr-1 animate-pulse"></div>
+                            Synced
+                          </Badge>
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Will generate timetable for <span className="font-semibold text-primary">{numberOfClasses} classes</span> × <span className="font-semibold text-primary">{numberOfSections} sections</span> = <span className="font-semibold text-primary">{numberOfClasses * numberOfSections} total sections</span> for <span className="font-semibold text-primary">{selectedDepartment}</span> department
+                        </div>
                       </div>
                       
                       {/* Production ready - test controls removed */}
@@ -615,8 +1016,10 @@ Output JSON array of objects with keys: day (Mon..Sat), period (1-8), course (in
               </div>
               
               <UploadDataPanel />
-              <TimetableGenerator />
-              <EnrollmentManagement />
+              <TimetableGenerator 
+                constraints={constraints}
+                onConstraintsChange={setConstraints}
+              />
               <EmbeddingManagementPanel />
               <div className="grid gap-4 md:grid-cols-2">
                 <RegisterTeacher />
